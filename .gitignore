@@ -1,0 +1,16 @@
+/bin
+*.exe
+*.test
+*.out
+event-notifier
+
+.env
+*.env
+
+*.log
+
+.idea/
+.vscode/
+*.swp
+
+.DS_Store
