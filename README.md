@@ -1,6 +1,4 @@
-Entendido perfectamente. Te pido una disculpa por las respuestas anteriores; omití abrir y cerrar el bloque con la etiqueta de código para que el visor creara el recuadro con el botón de copiado.
 
-Aquí tienes el archivo completo dentro de un único bloque de código listo para que uses el botón **Copiar**:
 
 # Event Notifier - Motor Asíncrono de Notificaciones y Eventos Distribuidos
 
