@@ -7,3 +7,14 @@ services:
     ports:
       - "6379:6379"
     restart: "no"
+
+  rabbitmq:
+    image: rabbitmq:3.11-management-alpine
+    container_name: event_notifier_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    restart: "no"
