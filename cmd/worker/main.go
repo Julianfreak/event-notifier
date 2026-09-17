@@ -4,29 +4,35 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"event-notifier/internal/adapters/broker"
 	"event-notifier/internal/adapters/cache"
 	"event-notifier/internal/core/domain"
+	"event-notifier/internal/core/services"
 )
 
 func main() {
-	fmt.Println("==================================================")
-	fmt.Println("  Event Notifier - Prueba RabbitMQ + Redis")
-	fmt.Println("==================================================")
+	fmt.Println("==========================================================")
+	fmt.Println("  Event Notifier - Resiliencia, DLQ y Graceful Shutdown   ")
+	fmt.Println("==========================================================")
 
+	// 1. Creamos un contexto raíz con cancelación para el apagado limpio
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 1. Conectamos con Redis (localhost:6379)
+	// 2. Conectamos con Redis (localhost:6379)
 	redisRepo, err := cache.NewRedisIdempotencyStorage("localhost:6379", "", 0)
 	if err != nil {
-		log.Fatalf("Error al conectar con Redis: %v", err)
+		log.Fatalf("Error conectando con Redis: %v", err)
 	}
-	fmt.Println("[Redis]: Conectado exitosamente.")
+	fmt.Println("[Redis]: Conexión establecida exitosamente.")
 
-	// 2. Conectamos con RabbitMQ (localhost:5672)
+	// 3. Conectamos con RabbitMQ e inicializamos Colas, DLX y DLQ
 	amqpURL := "amqp://guest:guest@localhost:5672/"
 	exchange := "notificaciones_exchange"
 	queue := "cola_notificaciones"
@@ -34,86 +40,74 @@ func main() {
 
 	rabbitAdapter, err := broker.NewRabbitMQAdapter(amqpURL, exchange, queue, routingKey)
 	if err != nil {
-		log.Fatalf("Error al inicializar RabbitMQ: %v", err)
+		log.Fatalf("Error inicializando RabbitMQ: %v", err)
 	}
 	defer rabbitAdapter.Cerrar()
-	fmt.Println("[RabbitMQ]: Conexión, Exchange y Cola inicializados exitosamente.")
+	fmt.Println("[RabbitMQ]: Conexión, Colas durables y Dead Letter Queue listas.")
 
-	// 3. Iniciamos el Consumidor en segundo plano (Goroutine)
+	// 4. Inicializamos el Despachador de Negocio (3 reintentos, espera inicial 1s)
+	dispatcher := services.NewNotificationDispatcher(redisRepo, 3, 1*time.Second)
+
+	// 5. Canal del sistema operativo para capturar señales de apagado (SIGINT / SIGTERM)
+	stopChan := make(chan os.Signal, 1)
+	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
+
+	// WaitGroup para coordinar que el consumidor termine antes de salir
+	var wg sync.WaitGroup
+
+	// 6. Arrancamos el Consumidor en una Goroutine
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := rabbitAdapter.IniciarConsumo(ctx, func(n *domain.Notificacion) error {
-			fmt.Printf("\n--> [Worker]: Mensaje recibido de RabbitMQ. ID: %s | Destinatario: %s\n", n.ID, n.Destinatario)
-
-			// Verificamos idempotencia en Redis
-			esDuplicado, err := redisRepo.EsDuplicado(ctx, n.IdempotencyKey)
-			if err != nil {
-				return fmt.Errorf("error consultando Redis: %w", err)
-			}
-
-			if esDuplicado {
-				fmt.Printf("    [Idempotencia]: Notificación %s con clave '%s' ya fue procesada. DESCARTANDO.\n", n.ID, n.IdempotencyKey)
-				return nil // Retornamos nil para dar Ack a RabbitMQ y quitar el duplicado de la cola
-			}
-
-			// Marcamos la clave como procesada en Redis con TTL de 1 hora
-			if err := redisRepo.MarcarProcesado(ctx, n.IdempotencyKey, 1*time.Hour); err != nil {
-				return fmt.Errorf("error registrando idempotencia: %w", err)
-			}
-
-			// Simulamos el envío del mensaje (Email / SMS)
-			time.Sleep(500 * time.Millisecond)
-			n.MarcarEnviado()
-			fmt.Printf("    [Éxito]: Notificación %s enviada por canal %s a %s. Estado: %s\n",
-				n.ID, n.Canal, n.Destinatario, n.Estado)
-
-			return nil // Retorna nil para que RabbitMQ ejecute Ack(false)
+			// Toda la lógica de reintentos y desvío a DLQ ocurre dentro del dispatcher
+			return dispatcher.DespacharConResiliencia(ctx, n)
 		})
 		if err != nil {
-			log.Printf("Consumidor finalizado con error: %v", err)
+			log.Printf("[Consumidor]: Finalizado: %v", err)
 		}
 	}()
 
-	// Damos 1 segundo para que el consumidor se registre en la cola
-	time.Sleep(1 * time.Second)
+	// 7. Publicamos dos eventos de prueba:
+	// Evento A: Mensaje normal que debe procesarse con éxito.
+	// Evento B: Mensaje con falla simulada que agotará reintentos y viajará a la DLQ.
+	time.Sleep(500 * time.Millisecond)
+	fmt.Println("\n[Productor]: Publicando eventos de prueba...")
 
-	// 4. Publicamos 3 Notificaciones al Broker
-	fmt.Println("\n[Productor]: Publicando 3 eventos hacia RabbitMQ...")
-
-	eventos := []*domain.Notificacion{
-		{
-			ID:             "notif-101",
-			IdempotencyKey: "pago-transaccion-001", // Clave A
-			Canal:          domain.CanalEmail,
-			Destinatario:   "ana.gomez@empresa.com",
-			Mensaje:        "Su transferencia de $500 ha sido exitosa.",
-			Estado:         domain.EstadoPendiente,
-		},
-		{
-			ID:             "notif-102",
-			IdempotencyKey: "pago-transaccion-002", // Clave B
-			Canal:          domain.CanalSMS,
-			Destinatario:   "+573001234567",
-			Mensaje:        "Código de seguridad: 849201.",
-			Estado:         domain.EstadoPendiente,
-		},
-		{
-			ID:             "notif-103",
-			IdempotencyKey: "pago-transaccion-001", //¡CLAVE A REPETIDA! Simula reenvío
-			Canal:          domain.CanalEmail,
-			Destinatario:   "ana.gomez@empresa.com",
-			Mensaje:        "Su transferencia de $500 ha sido exitosa.",
-			Estado:         domain.EstadoPendiente,
-		},
+	eventoExitoso := &domain.Notificacion{
+		ID:             "notif-201",
+		IdempotencyKey: "orden-exitosa-001",
+		Canal:          domain.CanalEmail,
+		Destinatario:   "usuario.valido@empresa.com",
+		Mensaje:        "Su pedido #201 está en camino.",
+		Estado:         domain.EstadoPendiente,
 	}
 
-	for _, evento := range eventos {
-		if err := rabbitAdapter.Publicar(ctx, evento); err != nil {
-			log.Fatalf("Error publicando notificación: %v", err)
-		}
-		fmt.Printf("    -> Notificación %s publicada en el Exchange.\n", evento.ID)
+	eventoFallido := &domain.Notificacion{
+		ID:             "notif-202",
+		IdempotencyKey: "orden-fallida-002",
+		Canal:          domain.CanalEmail,
+		Destinatario:   "servidor.caido@error.com", // Dispara error 503
+		Mensaje:        "Este mensaje probará el desvío a la DLQ.",
+		Estado:         domain.EstadoPendiente,
 	}
 
-	// Esperamos 4 segundos para que el Worker procese los mensajes
-	time.Sleep(4 * time.Second)
-	fmt.Println("\n[Main]: Prueba completada exitosamente. Cerrando sistema.")
+	_ = rabbitAdapter.Publicar(ctx, eventoExitoso)
+	fmt.Println("    -> Evento normal (notif-201) publicado.")
+
+	_ = rabbitAdapter.Publicar(ctx, eventoFallido)
+	fmt.Println("    -> Evento con falla simulada (notif-202) publicado.")
+
+	fmt.Println("\n[Sistema]: En ejecución. Presiona Ctrl+C en cualquier momento para probar el Graceful Shutdown.\n")
+
+	// 8. Esperamos la señal de apagado del sistema operativo (Ctrl+C o SIGTERM)
+	<-stopChan
+	fmt.Println("\n[Apagado]: Señal recibida. Iniciando Graceful Shutdown...")
+
+	// 9. Cancelamos el contexto para detener nuevos consumos y esperas de backoff
+	cancel()
+
+	// 10. Esperamos a que los workers en vuelo finalicen ordenadamente
+	wg.Wait()
+	fmt.Println("[Apagado]: Todos los procesos finalizaron de forma limpia. Saliendo sin pérdida de datos.")
 }

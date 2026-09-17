@@ -19,66 +19,124 @@ type RabbitMQAdapter struct {
 	routingKey string
 }
 
-// NewRabbitMQAdapter conecta con RabbitMQ y asegura la infraestructura (Exchange, Cola y Binding)
 func NewRabbitMQAdapter(url string, exchange string, queueName string, routingKey string) (*RabbitMQAdapter, error) {
-	// 1. Abrimos la conexión TCP con el servidor RabbitMQ
+	// 1. Abrimos conexión TCP física
 	conn, err := amqp.Dial(url)
 	if err != nil {
 		return nil, fmt.Errorf("fallo al conectar con RabbitMQ en %s: %w", url, err)
 	}
 
-	// 2. Abrimos un canal de comunicación multiplexado sobre la conexión TCP
+	// 2. Abrimos canal virtual sobre la conexión
 	ch, err := conn.Channel()
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("fallo al abrir canal con RabbitMQ: %w", err)
 	}
 
-	// 3. Declaramos el Exchange (de tipo 'direct': enruta según coincidencia exacta de la routing key)
-	// durable: true garantiza que si RabbitMQ se reinicia, el Exchange no se borra
+	// -------------------------------------------------------------
+	// CONFIGURACIÓN DE LA DEAD LETTER QUEUE (DLQ)
+	// -------------------------------------------------------------
+	dlxExchange := exchange + "_dlx"
+	dlqQueueName := queueName + "_dlq"
+	dlqRoutingKey := routingKey + ".dead"
+
+	// A. Declaramos el Dead Letter Exchange (DLX)
 	err = ch.ExchangeDeclare(
-		exchange, // nombre del exchange
-		"direct", // tipo
-		true,     // durable
-		false,    // auto-deleted
-		false,    // internal
-		false,    // no-wait
-		nil,      // arguments
+		dlxExchange,
+		"direct",
+		true,  // durable
+		false, // auto-deleted
+		false, // internal
+		false, // no-wait
+		nil,
 	)
 	if err != nil {
 		ch.Close()
 		conn.Close()
-		return nil, fmt.Errorf("fallo al declarar exchange %s: %w", exchange, err)
+		return nil, fmt.Errorf("fallo al declarar DLX: %w", err)
 	}
 
-	// 4. Declaramos la Cola física
-	// durable: true garantiza que los mensajes pendientes sobrevivan a caídas del broker
+	// B. Declaramos la Cola de Mensajes Muertos (DLQ)
 	_, err = ch.QueueDeclare(
-		queueName, // nombre de la cola
-		true,      // durable
-		false,     // delete when unused
-		false,     // exclusive (no se limita a una sola conexión)
-		false,     // no-wait
-		nil,       // arguments
+		dlqQueueName,
+		true,  // durable
+		false, // auto-delete
+		false, // exclusive
+		false, // no-wait
+		nil,
 	)
 	if err != nil {
 		ch.Close()
 		conn.Close()
-		return nil, fmt.Errorf("fallo al declarar cola %s: %w", queueName, err)
+		return nil, fmt.Errorf("fallo al declarar DLQ: %w", err)
 	}
 
-	// 5. Enlazamos la Cola con el Exchange mediante la Routing Key
+	// C. Enlazamos la DLQ con el DLX
 	err = ch.QueueBind(
-		queueName,  // cola destino
-		routingKey, // clave de enrutamiento
-		exchange,   // exchange origen
+		dlqQueueName,
+		dlqRoutingKey,
+		dlxExchange,
 		false,
 		nil,
 	)
 	if err != nil {
 		ch.Close()
 		conn.Close()
-		return nil, fmt.Errorf("fallo al enlazar cola con exchange: %w", err)
+		return nil, fmt.Errorf("fallo al enlazar DLQ con DLX: %w", err)
+	}
+
+	// -------------------------------------------------------------
+	// CONFIGURACIÓN DE LA COLA PRINCIPAL (Vinculada al DLX)
+	// -------------------------------------------------------------
+	// D. Declaramos el Exchange Principal
+	err = ch.ExchangeDeclare(
+		exchange,
+		"direct",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		ch.Close()
+		conn.Close()
+		return nil, fmt.Errorf("fallo al declarar exchange principal: %w", err)
+	}
+
+	// E. Declaramos la Cola Principal con argumentos de redirección a DLX
+	// amqp.Table define los metadatos 'x-dead-letter-*'
+	queueArgs := amqp.Table{
+		"x-dead-letter-exchange":    dlxExchange,
+		"x-dead-letter-routing-key": dlqRoutingKey,
+	}
+
+	_, err = ch.QueueDeclare(
+		queueName,
+		true,  // durable
+		false, // auto-delete
+		false, // exclusive
+		false, // no-wait
+		queueArgs,
+	)
+	if err != nil {
+		ch.Close()
+		conn.Close()
+		return nil, fmt.Errorf("fallo al declarar cola principal con DLX: %w", err)
+	}
+
+	// F. Enlazamos la Cola Principal al Exchange Principal
+	err = ch.QueueBind(
+		queueName,
+		routingKey,
+		exchange,
+		false,
+		nil,
+	)
+	if err != nil {
+		ch.Close()
+		conn.Close()
+		return nil, fmt.Errorf("fallo al enlazar cola principal: %w", err)
 	}
 
 	return &RabbitMQAdapter{
@@ -90,102 +148,87 @@ func NewRabbitMQAdapter(url string, exchange string, queueName string, routingKe
 	}, nil
 }
 
-// Publicar serializa la notificación a JSON y la entrega al Exchange
 func (r *RabbitMQAdapter) Publicar(ctx context.Context, n *domain.Notificacion) error {
 	cuerpoJSON, err := json.Marshal(n)
 	if err != nil {
-		return fmt.Errorf("error al serializar notificación a JSON: %w", err)
+		return fmt.Errorf("error al serializar notificación: %w", err)
 	}
 
-	// Creamos el mensaje con DeliveryMode: Persistent para que se guarde en disco
 	mensaje := amqp.Publishing{
-		DeliveryMode: amqp.Persistent, // Mensaje persistente en disco
+		DeliveryMode: amqp.Persistent,
 		ContentType:  "application/json",
 		Body:         cuerpoJSON,
 		MessageId:    n.ID,
 	}
 
-	err = r.ch.PublishWithContext(
+	return r.ch.PublishWithContext(
 		ctx,
-		r.exchange,   // exchange al que va dirigido
-		r.routingKey, // clave de enrutamiento
-		false,        // mandatory
-		false,        // immediate
+		r.exchange,
+		r.routingKey,
+		false,
+		false,
 		mensaje,
 	)
-	if err != nil {
-		return fmt.Errorf("error al publicar mensaje en RabbitMQ: %w", err)
-	}
-
-	return nil
 }
 
-// IniciarConsumo se queda escuchando la cola y procesa mensajes con Acuse de Recibo manual
 func (r *RabbitMQAdapter) IniciarConsumo(ctx context.Context, handler func(n *domain.Notificacion) error) error {
-	// Configuramos QoS (Quality of Service): prefetchCount = 1
-	// Le dice a RabbitMQ: "No le entregues más de 1 mensaje a la vez a este worker hasta que dé Ack"
-	err := r.ch.Qos(
-		1,     // prefetch count
-		0,     // prefetch size
-		false, // global
-	)
+	err := r.ch.Qos(1, 0, false)
 	if err != nil {
-		return fmt.Errorf("error configurando QoS de RabbitMQ: %w", err)
+		return fmt.Errorf("error configurando QoS: %w", err)
 	}
 
-	// Registramos el consumidor con autoAck: false (Manual Ack obligatorio)
 	mensajes, err := r.ch.Consume(
-		r.queueName, // nombre de la cola
-		"",          // consumer tag (generado automáticamente)
-		false,       // autoAck: false (clave para no perder mensajes)
-		false,       // exclusive
-		false,       // no-local
-		false,       // no-wait
-		nil,         // args
+		r.queueName,
+		"",
+		false, // autoAck: false obligatorio
+		false,
+		false,
+		false,
+		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("error al registrar consumidor en cola %s: %w", r.queueName, err)
+		return fmt.Errorf("error registrando consumidor: %w", err)
 	}
 
-	log.Printf("[RabbitMQ]: Consumidor escuchando en cola '%s'...", r.queueName)
+	log.Printf("[RabbitMQ]: Consumidor escuchando en '%s' (DLQ activa en '%s_dlq')...", r.queueName, r.queueName)
 
-	// Bucle continuo de lectura de mensajes
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[RabbitMQ]: Contexto cancelado. Deteniendo consumo.")
+			log.Println("[RabbitMQ]: Contexto cancelado. Cerrando bucle de consumo.")
 			return nil
 
 		case entrega, abierta := <-mensajes:
 			if !abierta {
-				log.Println("[RabbitMQ]: Canal de mensajes cerrado.")
+				log.Println("[RabbitMQ]: Canal cerrado por el broker.")
 				return nil
 			}
 
-			// Deserializamos el JSON entrante a la entidad de dominio
 			var notif domain.Notificacion
 			if err := json.Unmarshal(entrega.Body, &notif); err != nil {
-				log.Printf("[RabbitMQ]: Mensaje corrupto descartado: %v", err)
-				// Nack(false, false) descarta el mensaje sin reencolarlo si no es un JSON válido
+				log.Printf("[RabbitMQ]: Mensaje corrupto. Descartando a DLQ: %v", err)
+				// Nack(requeue = false): Envía automáticamente el mensaje corrupto a la DLQ
 				entrega.Nack(false, false)
 				continue
 			}
 
-			// Ejecutamos la función de negocio del handler
+			// Ejecutamos la función de procesamiento que incluye los reintentos
 			if err := handler(&notif); err != nil {
-				log.Printf("[RabbitMQ]: Error procesando notificación %s: %v. Reencolando...", notif.ID, err)
-				// Si la lógica falló por red externa, Nack(false, true) le pide a RabbitMQ reencolar el mensaje
-				entrega.Nack(false, true)
+				log.Printf("[RabbitMQ]: Fallo definitivo en notificación %s tras reintentos: %v", notif.ID, err)
+				// ¡PUNTO CLAVE DE RESILIENCIA!:
+				// Al agotar los reintentos, ejecutamos Nack(requeue: false).
+				// Como la cola tiene configurado x-dead-letter-exchange, RabbitMQ NO destruye el mensaje,
+				// sino que lo rutea a 'cola_notificaciones_dlq'.
+				entrega.Nack(false, false)
 				continue
 			}
 
-			// Si el handler terminó exitosamente, confirmamos a RabbitMQ
+			// Confirmación exitosa
 			entrega.Ack(false)
 		}
 	}
 }
 
-// Cerrar libera los recursos de red de forma limpia
 func (r *RabbitMQAdapter) Cerrar() error {
 	if err := r.ch.Close(); err != nil {
 		return err

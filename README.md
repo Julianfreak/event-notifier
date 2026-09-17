@@ -13,7 +13,7 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 * internal/core/services: Lógica de orquestación, patrón Worker Pool concurrente y despacho de notificaciones.
 * internal/adapters/broker: Adaptador de RabbitMQ (Exchange directo durable, colas persistentes, control QoS y manual Ack/Nack).
 * internal/adapters/cache: Adaptador de Redis para control de idempotencia distribuida (prevención estricta de mensajes duplicados con SetNX).
-* cmd/worker: Punto de entrada del servicio consumidor (Background Worker).
+* cmd/worker: Punto de entrada del servicio consumidor con soporte de Graceful Shutdown (SIGINT/SIGTERM).
 
 ---
 
@@ -23,9 +23,10 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 * Broker de Mensajería: RabbitMQ con protocolo AMQP 0-9-1, colas y exchanges durables, mensajes persistentes en disco y acuse de recibo manual (Manual Ack).
 * Concurrencia: Patrón Worker Pool con Goroutines y Canales para limitar el consumo de CPU y memoria ante cargas masivas.
 * Calidad de Servicio (QoS): Configuración de prefetch count en 1 para garantizar un reparto equilibrado de mensajes entre workers concurrentes.
-* Apagado Controlado (Graceful Shutdown): Uso de sync.WaitGroup para garantizar que todos los trabajadores terminen de procesar las tareas encoladas antes de cerrar el proceso.
+* Apagado Controlado (Graceful Shutdown): Captura de señales del sistema operativo (SIGINT, SIGTERM) mediante contextos cancelables y sync.WaitGroup para evitar pérdida de datos en tránsito.
 * Idempotencia Distribuida: Bloqueo atómico y verificación de duplicados mediante Idempotency Keys en Redis utilizando la operación SetNX con expiración automática (TTL).
-* Resiliencia: Reintentos con Exponential Backoff y enrutamiento de mensajes irrecuperables a una Dead Letter Queue (DLQ).
+* Resiliencia y DLQ: Enrutamiento automático de mensajes fallidos a una Dead Letter Queue (DLQ) mediante directivas x-dead-letter-exchange al agotar reintentos.
+* Exponential Backoff: Algoritmo de reintentos con duplicación de tiempo de espera (1s -> 2s -> 4s) para mitigar caídas de servicios externos.
 * Contenedorización: Docker Compose para orquestar la infraestructura distribuida (Redis y RabbitMQ).
 
 ---
@@ -50,7 +51,7 @@ Comando: `go run cmd/worker/main.go`
 * [x] Fase 2: Definición de Puertos e implementación de Worker Pool concurrente.
 * [x] Fase 3: Integración de Redis para control de Idempotencia.
 * [x] Fase 4: Integración de RabbitMQ (Productor, Consumidor, Exchanges y Colas con Manual Ack).
-* [ ] Fase 5: Patrón de Resiliencia con Reintentos Exponenciales y Graceful Shutdown.
+* [x] Fase 5: Patrón de Resiliencia con Reintentos Exponenciales, DLQ y Graceful Shutdown.
 * [ ] Fase 6: Pruebas Unitarias con Mocks y verificación de cobertura.
 
 ---
