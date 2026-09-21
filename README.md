@@ -27,6 +27,7 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 * Idempotencia Distribuida: Bloqueo atómico y verificación de duplicados mediante Idempotency Keys en Redis utilizando la operación SetNX con expiración automática (TTL).
 * Resiliencia y DLQ: Enrutamiento automático de mensajes fallidos a una Dead Letter Queue (DLQ) mediante directivas x-dead-letter-exchange al agotar reintentos.
 * Exponential Backoff: Algoritmo de reintentos con duplicación de tiempo de espera (1s -> 2s -> 4s) para mitigar caídas de servicios externos.
+* Testing Automatizado: Pruebas unitarias mediante Mocks e interfaces implícitas (testing nativo) evaluando idempotencia, fallas de red, agotamiento de reintentos y cancelaciones de contexto con alta cobertura (>85%).
 * Contenedorización: Docker Compose para orquestar la infraestructura distribuida (Redis y RabbitMQ).
 
 ---
@@ -43,6 +44,10 @@ Comando: `docker compose up -d`
 
 Comando: `go run cmd/worker/main.go`
 
+### 3. Ejecutar las Pruebas Unitarias y Cobertura
+
+Comando: `go test -v -cover ./internal/core/services/...`
+
 ---
 
 ## Estado del Proyecto
@@ -52,6 +57,6 @@ Comando: `go run cmd/worker/main.go`
 * [x] Fase 3: Integración de Redis para control de Idempotencia.
 * [x] Fase 4: Integración de RabbitMQ (Productor, Consumidor, Exchanges y Colas con Manual Ack).
 * [x] Fase 5: Patrón de Resiliencia con Reintentos Exponenciales, DLQ y Graceful Shutdown.
-* [ ] Fase 6: Pruebas Unitarias con Mocks y verificación de cobertura.
+* [x] Fase 6: Pruebas Unitarias con Mocks y verificación de cobertura.
 
 ---
