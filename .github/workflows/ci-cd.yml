@@ -1,0 +1,68 @@
+name: CI/CD Pipeline - Event Notifier
+
+on:
+  push:
+  _branches: [ "main", "master" ]
+  pull_request:
+  _branches: [ "main", "master" ]
+
+jobs:
+  test:
+    name: Continuous Integration (CI) - Tests & Quality
+    runs-on: ubuntu-latest
+    
+    # Servicios auxiliares si se requieren pruebas de integración futuras, 
+    # aunque el proyecto base utiliza pruebas unitarias con mocks.
+    services:
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        ports:
+          - 5672:5672
+          - 15672:15672
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Go 1.23+
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.24'
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run Unit Tests with Coverage
+        run: go test -v -cover ./internal/core/services/...
+
+  build-and-push:
+    name: Continuous Deployment (CD) - Docker Image
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: tu-usuario-dockerhub/event-notifier:latest

@@ -1,34 +1,35 @@
 # Event Notifier - Motor Asíncrono de Notificaciones y Eventos Distribuidos
 
-Motor de procesamiento asíncrono de eventos y notificaciones masivas de alta concurrencia desarrollado en Go (Golang), diseñado bajo los principios de Arquitectura Hexagonal (Ports and Adapters), Clean Code y patrones avanzados de sistemas distribuidos.
+Motor de procesamiento asíncrono de eventos y notificaciones masivas de alta concurrencia desarrollado en Go (Golang), diseñado bajo los principios de Arquitectura Hexagonal (Ports and Adapters), Clean Code y patrones avanzados de sistemas distribuidos[cite: 1].
 
 ---
 
 ## Arquitectura del Sistema
 
-El proyecto separa la lógica central del negocio de los mecanismos de transporte y brokers externos:
+El proyecto separa la lógica central del negocio de los mecanismos de transporte y brokers externos[cite: 1]:
 
-* internal/core/domain: Entidades puras (Notificación, Canales EMAIL/SMS/PUSH, estados y validaciones de ciclo de vida).
-* internal/core/ports: Contratos e interfaces para el Broker de Mensajería, la persistencia de idempotencia y los proveedores de envío.
-* internal/core/services: Lógica de orquestación, patrón Worker Pool concurrente y despacho de notificaciones.
-* internal/adapters/broker: Adaptador de RabbitMQ (Exchange directo durable, colas persistentes, control QoS y manual Ack/Nack).
-* internal/adapters/cache: Adaptador de Redis para control de idempotencia distribuida (prevención estricta de mensajes duplicados con SetNX).
-* cmd/worker: Punto de entrada del servicio consumidor con soporte de Graceful Shutdown (SIGINT/SIGTERM).
+* internal/core/domain: Entidades puras (Notificación, Canales EMAIL/SMS/PUSH, estados y validaciones de ciclo de vida)[cite: 1].
+* internal/core/ports: Contratos e interfaces para el Broker de Mensajería, la persistencia de idempotencia y los proveedores de envío[cite: 1].
+* internal/core/services: Lógica de orquestación, patrón Worker Pool concurrente y despacho de notificaciones[cite: 1].
+* internal/adapters/broker: Adaptador de RabbitMQ (Exchange directo durable, colas persistentes, control QoS y manual Ack/Nack)[cite: 1].
+* internal/adapters/cache: Adaptador de Redis para control de idempotencia distribuida (prevención estricta de mensajes duplicados con SetNX)[cite: 1].
+* cmd/worker: Punto de entrada del servicio consumidor con soporte de Graceful Shutdown (SIGINT/SIGTERM)[cite: 1].
 
 ---
 
 ## Características Técnicas y Patrones
 
-* Lenguaje: Go 1.23+
-* Broker de Mensajería: RabbitMQ con protocolo AMQP 0-9-1, colas y exchanges durables, mensajes persistentes en disco y acuse de recibo manual (Manual Ack).
-* Concurrencia: Patrón Worker Pool con Goroutines y Canales para limitar el consumo de CPU y memoria ante cargas masivas.
-* Calidad de Servicio (QoS): Configuración de prefetch count en 1 para garantizar un reparto equilibrado de mensajes entre workers concurrentes.
-* Apagado Controlado (Graceful Shutdown): Captura de señales del sistema operativo (SIGINT, SIGTERM) mediante contextos cancelables y sync.WaitGroup para evitar pérdida de datos en tránsito.
-* Idempotencia Distribuida: Bloqueo atómico y verificación de duplicados mediante Idempotency Keys en Redis utilizando la operación SetNX con expiración automática (TTL).
-* Resiliencia y DLQ: Enrutamiento automático de mensajes fallidos a una Dead Letter Queue (DLQ) mediante directivas x-dead-letter-exchange al agotar reintentos.
-* Exponential Backoff: Algoritmo de reintentos con duplicación de tiempo de espera (1s -> 2s -> 4s) para mitigar caídas de servicios externos.
-* Testing Automatizado: Pruebas unitarias mediante Mocks e interfaces implícitas (testing nativo) evaluando idempotencia, fallas de red, agotamiento de reintentos y cancelaciones de contexto con alta cobertura (>85%).
-* Contenedorización: Docker Compose para orquestar la infraestructura distribuida (Redis y RabbitMQ).
+* Lenguaje: Go 1.23+[cite: 1]
+* Broker de Mensajería: RabbitMQ con protocolo AMQP 0-9-1, colas y exchanges durables, mensajes persistentes en disco y acuse de recibo manual (Manual Ack)[cite: 1].
+* Concurrencia: Patrón Worker Pool con Goroutines y Canales para limitar el consumo de CPU y memoria ante cargas masivas[cite: 1].
+* Calidad de Servicio (QoS): Configuración de prefetch count en 1 para garantizar un reparto equilibrado de mensajes entre workers concurrentes[cite: 1].
+* Apagado Controlado (Graceful Shutdown): Captura de señales del sistema operativo (SIGINT, SIGTERM) mediante contextos cancelables y sync.WaitGroup para evitar pérdida de datos en tránsito[cite: 1].
+* Idempotencia Distribuida: Bloqueo atómico y verificación de duplicados mediante Idempotency Keys en Redis utilizando la operación SetNX con expiración automática (TTL)[cite: 1].
+* Resiliencia y DLQ: Enrutamiento automático de mensajes fallidos a una Dead Letter Queue (DLQ) mediante directivas x-dead-letter-exchange al agotar reintentos[cite: 1].
+* Exponential Backoff: Algoritmo de reintentos con duplicación de tiempo de espera (1s -> 2s -> 4s) para mitigar caídas de servicios externos[cite: 1].
+* Testing Automatizado: Pruebas unitarias mediante Mocks e interfaces implícitas (testing nativo) evaluando idempotencia, fallas de red, agotamiento de reintentos y cancelaciones de contexto con alta cobertura (>85%)[cite: 1].
+* Contenedorización: Docker Compose para orquestar la infraestructura distribuida (Redis y RabbitMQ)[cite: 1].
+* **CI/CD Automatizado:** Pipeline en GitHub Actions para ejecución continua de pruebas unitarias y construcción/publicación automatizada de imágenes Docker.
 
 ---
 
@@ -36,27 +37,26 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 
 ### 1. Iniciar la infraestructura de soporte (Redis y RabbitMQ)
 
-Comando: `docker compose up -d`
+Comando: `docker compose up -d`[cite: 1]
 
-* Panel de Administración Web de RabbitMQ: http://localhost:15672 (Usuario: guest | Contraseña: guest)
+* Panel de Administración Web de RabbitMQ: http://localhost:15672 (Usuario: guest | Contraseña: guest)[cite: 1]
 
 ### 2. Ejecutar la prueba del Consumidor, Broker e Idempotencia
 
-Comando: `go run cmd/worker/main.go`
+Comando: `go run cmd/worker/main.go`[cite: 1]
 
 ### 3. Ejecutar las Pruebas Unitarias y Cobertura
 
-Comando: `go test -v -cover ./internal/core/services/...`
+Comando: `go test -v -cover ./internal/core/services/...`[cite: 1]
 
 ---
 
 ## Estado del Proyecto
 
-* [x] Fase 1: Inicialización, Entidades de Dominio y Reglas de Negocio.
-* [x] Fase 2: Definición de Puertos e implementación de Worker Pool concurrente.
-* [x] Fase 3: Integración de Redis para control de Idempotencia.
-* [x] Fase 4: Integración de RabbitMQ (Productor, Consumidor, Exchanges y Colas con Manual Ack).
-* [x] Fase 5: Patrón de Resiliencia con Reintentos Exponenciales, DLQ y Graceful Shutdown.
-* [x] Fase 6: Pruebas Unitarias con Mocks y verificación de cobertura.
-
----
+* [x] Fase 1: Inicialización, Entidades de Dominio y Reglas de Negocio[cite: 1].
+* [x] Fase 2: Definición de Puertos e implementación de Worker Pool concurrente[cite: 1].
+* [x] Fase 3: Integración de Redis para control de Idempotencia[cite: 1].
+* [x] Fase 4: Integración de RabbitMQ (Productor, Consumidor, Exchanges y Colas con Manual Ack)[cite: 1].
+* [x] Fase 5: Patrón de Resiliencia con Reintentos Exponenciales, DLQ y Graceful Shutdown[cite: 1].
+* [x] Fase 6: Pruebas Unitarias con Mocks y verificación de cobertura[cite: 1].
+* [x] Fase 7: Implementación de Pipeline CI/CD con GitHub Actions y Docker.
