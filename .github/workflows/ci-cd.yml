@@ -2,9 +2,9 @@ name: CI/CD Pipeline - Event Notifier
 
 on:
   push:
-  _branches: [ "main", "master" ]
+    branches: [ "main", "master" ]
   pull_request:
-  _branches: [ "main", "master" ]
+    branches: [ "main", "master" ]
 
 jobs:
   test:
@@ -41,8 +41,27 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Run Unit Tests with Coverage
-        run: go test -v -cover ./internal/core/services/...
+      - name: Run Unit Tests and Enforce 85% Coverage
+        run: |
+          # 1. Ejecutar las pruebas generando un archivo de reporte de cobertura
+          go test -coverprofile=coverage.out ./internal/core/services/...
+          
+          # 2. Extraer el porcentaje de la línea total del reporte
+          COVERAGE_STR=$(go tool cover -func=coverage.out | grep total: | awk '{print $3}')
+          echo "Cobertura total obtenida: $COVERAGE_STR"
+          
+          # 3. Remover el carácter '%' para obtener el valor numérico puro
+          COVERAGE_NUM=${COVERAGE_STR%\%?}
+          
+          # 4. Validar que la cobertura sea >= 85.0% utilizando awk
+          PASSED=$(awk -v cov="$COVERAGE_NUM" 'BEGIN {print (cov >= 85.0) ? "1" : "0"}')
+          
+          if [ "$PASSED" -eq "1" ]; then
+            echo "¡Éxito! La cobertura de código cumple con el estándar requerido (>85%)."
+          else
+            echo "Error: La cobertura actual ($COVERAGE_NUM%) es inferior al umbral mínimo del 85%."
+            exit 1
+          fi
 
   build-and-push:
     name: Continuous Deployment (CD) - Docker Image
