@@ -51,7 +51,7 @@ jobs:
           echo "Cobertura total obtenida: $COVERAGE_STR"
           
           # 3. Remover el carácter '%' para obtener el valor numérico puro
-          COVERAGE_NUM=${COVERAGE_STR%\%?}
+          COVERAGE_NUM=${COVERAGE_STR%\%}
           
           # 4. Validar que la cobertura sea >= 85.0% utilizando awk
           PASSED=$(awk -v cov="$COVERAGE_NUM" 'BEGIN {print (cov >= 85.0) ? "1" : "0"}')
@@ -84,4 +84,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: tu-usuario-dockerhub/event-notifier:latest
+          tags: saavedrabackdev/event-notifier:latest
