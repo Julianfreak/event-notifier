@@ -1,5 +1,7 @@
 # Etapa 1: Compilación de la aplicación Go
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
+
+ENV GOTOOLCHAIN=auto
 
 # Directorio de trabajo dentro del contenedor de compilación
 WORKDIR /app
