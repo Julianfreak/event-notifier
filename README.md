@@ -36,7 +36,7 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 
 ## Cómo ejecutar el proyecto y sus componentes
 
-### 1. Iniciar la infraestructura de soporte (Redis y RabbitMQ)
+### 1. Iniciar la infraestructura de soporte (Redis, RabbitMQ y Prometheus)
 
 Comando: `docker compose up -d`[cite: 1]
 
