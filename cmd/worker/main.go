@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"event-notifier/internal/adapters/broker"
 	"event-notifier/internal/adapters/cache"
@@ -20,6 +23,14 @@ func main() {
 	fmt.Println("==========================================================")
 	fmt.Println("  Event Notifier - Resiliencia, DLQ y Graceful Shutdown   ")
 	fmt.Println("==========================================================")
+
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		log.Println("Servidor de métricas Prometheus escuchando en :2112/metrics")
+		if err := http.ListenAndServe(":2112", nil); err != nil {
+			log.Fatalf("Error iniciando servidor de métricas: %v", err)
+		}
+	}()
 
 	// 1. Creamos un contexto raíz con cancelación para el apagado limpio
 	ctx, cancel := context.WithCancel(context.Background())

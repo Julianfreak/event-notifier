@@ -7,8 +7,11 @@ import (
 	"log"
 	"time"
 
+	"event-notifier/internal/adapters/metrics"
 	"event-notifier/internal/core/domain"
 	"event-notifier/internal/core/ports"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type NotificationDispatcher struct {
@@ -31,14 +34,19 @@ func NewNotificationDispatcher(
 
 // DespacharConResiliencia ejecuta la idempotencia y los reintentos con espera exponencial
 func (d *NotificationDispatcher) DespacharConResiliencia(ctx context.Context, n *domain.Notificacion) error {
+	// MÉTRICAS PROMETHEUS: Inicia el temporizador usando el canal (EMAIL/SMS/PUSH) como etiqueta
+	timer := prometheus.NewTimer(metrics.ProcessingDuration.WithLabelValues(string(n.Canal)))
+	defer timer.ObserveDuration()
 	// 1. Verificación de Idempotencia en Redis
 	esDuplicado, err := d.idempotencyRepo.EsDuplicado(ctx, n.IdempotencyKey)
 	if err != nil {
+		metrics.EventsProcessed.WithLabelValues(string(n.Canal), "error_redis").Inc()
 		return fmt.Errorf("error al verificar idempotencia: %w", err)
 	}
 
 	if esDuplicado {
 		log.Printf("[Dispatcher]: Mensaje %s descartado por clave de idempotencia duplicada (%s)", n.ID, n.IdempotencyKey)
+		metrics.EventsProcessed.WithLabelValues(string(n.Canal), "duplicate").Inc()
 		return nil // Se considera exitoso para dar Ack y no procesar de nuevo
 	}
 
@@ -48,6 +56,7 @@ func (d *NotificationDispatcher) DespacharConResiliencia(ctx context.Context, n 
 	for intento := 1; intento <= d.maxRetries; intento++ {
 		// Validamos si el contexto fue cancelado externamente antes de reintentar
 		if ctx.Err() != nil {
+			metrics.EventsProcessed.WithLabelValues(string(n.Canal), "context_canceled").Inc()
 			return ctx.Err()
 		}
 
@@ -63,6 +72,7 @@ func (d *NotificationDispatcher) DespacharConResiliencia(ctx context.Context, n 
 			_ = d.idempotencyRepo.MarcarProcesado(ctx, n.IdempotencyKey, 24*time.Hour)
 
 			log.Printf("[Dispatcher]: ¡Envío de %s completado con éxito a %s!", n.ID, n.Destinatario)
+			metrics.EventsProcessed.WithLabelValues(string(n.Canal), "success").Inc()
 			return nil
 		}
 
@@ -74,6 +84,7 @@ func (d *NotificationDispatcher) DespacharConResiliencia(ctx context.Context, n 
 		// Pausamos la ejecución con select para responder si el contexto se cancela durante la espera
 		select {
 		case <-ctx.Done():
+			metrics.EventsProcessed.WithLabelValues(string(n.Canal), "context_canceled_wait").Inc()
 			return ctx.Err()
 		case <-time.After(backoff):
 		}
@@ -82,6 +93,7 @@ func (d *NotificationDispatcher) DespacharConResiliencia(ctx context.Context, n 
 		backoff *= 2
 	}
 
+	metrics.EventsProcessed.WithLabelValues(string(n.Canal), "dlq_failed").Inc()
 	// Si se agotaron todos los intentos, retornamos el error para que RabbitMQ lo mande a la DLQ
 	return fmt.Errorf("se agotaron los %d reintentos para la notificación %s: %w", d.maxRetries, n.ID, domain.ErrMaxReintentosExcedido)
 }

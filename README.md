@@ -29,7 +29,8 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 * Exponential Backoff: Algoritmo de reintentos con duplicación de tiempo de espera (1s -> 2s -> 4s) para mitigar caídas de servicios externos[cite: 1].
 * Testing Automatizado: Pruebas unitarias mediante Mocks e interfaces implícitas (testing nativo) evaluando idempotencia, fallas de red, agotamiento de reintentos y cancelaciones de contexto con alta cobertura (>85%)[cite: 1].
 * Contenedorización: Docker Compose para orquestar la infraestructura distribuida (Redis y RabbitMQ)[cite: 1].
-* **CI/CD Automatizado:** Pipeline en GitHub Actions para ejecución continua de pruebas unitarias y construcción/publicación automatizada de imágenes Docker.
+* **CI/CD Automatizado:** Pipeline en GitHub Actions para ejecución continua de pruebas unitarias (>85% estricto) y construcción/publicación automatizada de imágenes Docker multi-stage.
+*Observabilidad (NUEVO): Instrumentación con Prometheus exponiendo métricas clave de negocio (Counters), rendimiento/latencia (Histograms) y saturación del sistema (Gauges).
 
 ---
 
@@ -40,6 +41,7 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 Comando: `docker compose up -d`[cite: 1]
 
 * Panel de Administración Web de RabbitMQ: http://localhost:15672 (Usuario: guest | Contraseña: guest)[cite: 1]
+* Panel de Métricas Prometheus: http://localhost:9090
 
 ### 2. Ejecutar la prueba del Consumidor, Broker e Idempotencia
 
@@ -60,3 +62,5 @@ Comando: `go test -v -cover ./internal/core/services/...`[cite: 1]
 * [x] Fase 5: Patrón de Resiliencia con Reintentos Exponenciales, DLQ y Graceful Shutdown[cite: 1].
 * [x] Fase 6: Pruebas Unitarias con Mocks y verificación de cobertura[cite: 1].
 * [x] Fase 7: Implementación de Pipeline CI/CD con GitHub Actions y Docker.
+* [x] Fase 8: Integración de Observabilidad (Métricas con Prometheus).
+* [ ] Fase 9: Dashboards de Grafana e Integración con Testcontainers.

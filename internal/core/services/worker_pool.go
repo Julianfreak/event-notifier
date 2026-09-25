@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"event-notifier/internal/adapters/metrics"
 	"event-notifier/internal/core/domain"
 )
 
@@ -29,6 +30,10 @@ func (p *Pool) Iniciar() {
 		// 2. Disparamos cada worker en su propia GOROUTINE en segundo plano
 		go func(workerID int) {
 			defer p.wg.Done() // Notifica al terminar de procesar todo el canal
+
+			metrics.ActiveWorkers.Inc()
+
+			defer metrics.ActiveWorkers.Dec()
 
 			// Cada worker extrae concurrentemente del mismo canal compartido
 			for notificacion := range p.tareas {
