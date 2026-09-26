@@ -36,20 +36,27 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 
 ## Cómo ejecutar el proyecto y sus componentes
 
-### 1. Iniciar la infraestructura de soporte (Redis, RabbitMQ y Prometheus)
+### 1. Iniciar la infraestructura de soporte (Broker, Caché y Observabilidad)
 
-Comando: `docker compose up -d`[cite: 1]
+Comando: `docker compose up -d`
 
-* Panel de Administración Web de RabbitMQ: http://localhost:15672 (Usuario: guest | Contraseña: guest)[cite: 1]
-* Panel de Métricas Prometheus: http://localhost:9090
+El stack levantará los siguientes servicios de forma efímera:
+* **RabbitMQ (Broker):** http://localhost:15672 (guest/guest)
+* **Grafana (Visualización unificada):** http://localhost:3000 (Sin login - Admin por defecto)
+* **Grafana Alloy (Colector):** http://localhost:12345
+* **Prometheus (Métricas):** http://localhost:9091
+* **Loki (Logs Estructurados):** Operando en background en el puerto 3100
 
-### 2. Ejecutar la prueba del Consumidor, Broker e Idempotencia
+### 2. Ejecutar la aplicación (Consumidor y Generador de Telemetría)
 
-Comando: `go run cmd/worker/main.go`[cite: 1]
+Comando: `go run cmd/worker/main.go`
+
+* El worker expondrá sus métricas internas en `http://localhost:2112/metrics` (consumidas por Alloy).
+* Generará logs estructurados en formato JSON (usando `log/slog`) tanto en consola como en `app.log`.
 
 ### 3. Ejecutar las Pruebas Unitarias y Cobertura
 
-Comando: `go test -v -cover ./internal/core/services/...`[cite: 1]
+Comando: `go test -v -cover ./internal/core/services/...`
 
 ---
 

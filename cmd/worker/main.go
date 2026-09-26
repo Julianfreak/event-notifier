@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,6 +25,15 @@ func main() {
 	fmt.Println("==========================================================")
 	fmt.Println("  Event Notifier - Resiliencia, DLQ y Graceful Shutdown   ")
 	fmt.Println("==========================================================")
+
+	file, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("No se pudo abrir app.log: %v", err)
+	}
+	// Escribe en consola y en el archivo al mismo tiempo
+	multiWriter := io.MultiWriter(os.Stdout, file)
+	logger := slog.New(slog.NewJSONHandler(multiWriter, nil))
+	slog.SetDefault(logger)
 
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())

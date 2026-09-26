@@ -1,7 +1,7 @@
 package services
 
 import (
-	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -24,28 +24,29 @@ func NewPool(numWorkers int, bufferSize int) *Pool {
 
 func (p *Pool) Iniciar() {
 	for w := 1; w <= p.numWorkers; w++ {
-		// 1. Incrementamos el contador del WaitGroup por cada trabajador
 		p.wg.Add(1)
 
-		// 2. Disparamos cada worker en su propia GOROUTINE en segundo plano
 		go func(workerID int) {
-			defer p.wg.Done() // Notifica al terminar de procesar todo el canal
-
+			defer p.wg.Done()
 			metrics.ActiveWorkers.Inc()
-
 			defer metrics.ActiveWorkers.Dec()
 
-			// Cada worker extrae concurrentemente del mismo canal compartido
 			for notificacion := range p.tareas {
-				fmt.Printf("[Worker %d]: Procesando notificación ID: %s para %s (Canal: %s)\n",
-					workerID, notificacion.ID, notificacion.Destinatario, notificacion.Canal)
+				slog.Info("Procesando notificación",
+					slog.Int("worker_id", workerID),
+					slog.String("id", notificacion.ID),
+					slog.String("destinatario", notificacion.Destinatario),
+					slog.String("canal", string(notificacion.Canal)),
+				)
 
-				time.Sleep(300 * time.Millisecond) // Simula la llamada de red/envío
+				time.Sleep(300 * time.Millisecond)
 
-				fmt.Printf("[Worker %d]: ¡Notificación ID: %s enviada con éxito!\n",
-					workerID, notificacion.ID)
+				slog.Info("Notificación enviada con éxito",
+					slog.Int("worker_id", workerID),
+					slog.String("id", notificacion.ID),
+				)
 			}
-		}(w) // Pasamos 'w' como parámetro a la función anónima
+		}(w)
 	}
 }
 

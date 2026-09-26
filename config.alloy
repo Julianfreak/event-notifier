@@ -1,0 +1,41 @@
+// 1. RECOLECCIÓN Y ENVÍO DE MÉTRICAS A PROMETHEUS
+prometheus.scrape "app_metrics" {
+    // Escucha las métricas de tu worker en la máquina host
+    targets = [{"__address__" = "host.docker.internal:2112"}]
+    forward_to = [prometheus.remote_write.local_prom.receiver]
+    scrape_interval = "5s"
+}
+
+prometheus.remote_write "local_prom" {
+    endpoint {
+        url = "http://prometheus:9090/api/v1/write"
+    }
+}
+
+// 2. RECOLECCIÓN Y ENVÍO DE LOGS A LOKI
+local.file_match "app_logs" {
+    path_targets = [{"__path__" = "/var/log/app.log"}]
+}
+
+loki.source.file "app_log_reader" {
+    targets    = local.file_match.app_logs.targets
+    forward_to = [loki.process.json_parser.receiver]
+}
+
+// Extrae el JSON nativo de slog para que Grafana pueda filtrar por worker_id, canal, etc.
+loki.process "json_parser" {
+    forward_to = [loki.write.local_loki.receiver]
+
+    stage.json {
+        expressions = { "level" = "level", "msg" = "msg" }
+    }
+    stage.labels {
+        values = { "level" = "level" }
+    }
+}
+
+loki.write "local_loki" {
+    endpoint {
+        url = "http://loki:3100/loki/api/v1/push"
+    }
+}
