@@ -94,31 +94,42 @@ func main() {
 	// Evento A: Mensaje normal que debe procesarse con éxito.
 	// Evento B: Mensaje con falla simulada que agotará reintentos y viajará a la DLQ.
 	time.Sleep(500 * time.Millisecond)
-	fmt.Println("\n[Productor]: Publicando eventos de prueba...")
+	fmt.Println("\n[Productor]: Publicando eventos de prueba continuamente (cada 5s)...")
+	go func() {
+		contador := 1
+		for {
+			idExito := fmt.Sprintf("notif-exitosa-%d", contador)
+			idFallo := fmt.Sprintf("notif-fallo-%d", contador)
+			eventoExitoso := &domain.Notificacion{
+				ID:             idExito,
+				IdempotencyKey: "orden-exitosa-001",
+				Canal:          domain.CanalEmail,
+				Destinatario:   "usuario.valido@empresa.com",
+				Mensaje:        "Su pedido #201 está en camino.",
+				Estado:         domain.EstadoPendiente,
+			}
 
-	eventoExitoso := &domain.Notificacion{
-		ID:             "notif-201",
-		IdempotencyKey: "orden-exitosa-001",
-		Canal:          domain.CanalEmail,
-		Destinatario:   "usuario.valido@empresa.com",
-		Mensaje:        "Su pedido #201 está en camino.",
-		Estado:         domain.EstadoPendiente,
-	}
+			fmt.Printf("    -> Evento normal (%s) publicado.\n", idExito)
 
-	eventoFallido := &domain.Notificacion{
-		ID:             "notif-202",
-		IdempotencyKey: "orden-fallida-002",
-		Canal:          domain.CanalEmail,
-		Destinatario:   "servidor.caido@error.com", // Dispara error 503
-		Mensaje:        "Este mensaje probará el desvío a la DLQ.",
-		Estado:         domain.EstadoPendiente,
-	}
+			eventoFallido := &domain.Notificacion{
+				ID:             idFallo,
+				IdempotencyKey: "orden-fallida-002",
+				Canal:          domain.CanalEmail,
+				Destinatario:   "servidor.caido@error.com", // Dispara error 503
+				Mensaje:        "Este mensaje probará el desvío a la DLQ.",
+				Estado:         domain.EstadoPendiente,
+			}
+			fmt.Printf("    -> Evento con falla simulada (%s) publicado.\n", idFallo)
 
-	_ = rabbitAdapter.Publicar(ctx, eventoExitoso)
-	fmt.Println("    -> Evento normal (notif-201) publicado.")
+			contador++
+			time.Sleep(5 * time.Second) // Espera 5 segundos antes de repetir
+			_ = rabbitAdapter.Publicar(ctx, eventoExitoso)
+			fmt.Println("    -> Evento normal (notif-201) publicado.")
 
-	_ = rabbitAdapter.Publicar(ctx, eventoFallido)
-	fmt.Println("    -> Evento con falla simulada (notif-202) publicado.")
+			_ = rabbitAdapter.Publicar(ctx, eventoFallido)
+			fmt.Println("    -> Evento con falla simulada (notif-202) publicado.")
+		}
+	}()
 
 	fmt.Println("\n[Sistema]: En ejecución. Presiona Ctrl+C en cualquier momento para probar el Graceful Shutdown.\n")
 

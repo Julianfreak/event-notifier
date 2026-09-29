@@ -4,6 +4,7 @@ prometheus.scrape "app_metrics" {
     targets = [{"__address__" = "host.docker.internal:2112"}]
     forward_to = [prometheus.remote_write.local_prom.receiver]
     scrape_interval = "5s"
+    scrape_timeout  = "4s"
 }
 
 prometheus.remote_write "local_prom" {
