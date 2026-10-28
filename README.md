@@ -34,6 +34,18 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 
 ---
 
+## 📊 Stack de Observabilidad y Monitoreo
+
+El proyecto incluye un entorno completo de observabilidad contenerizado y automatizado mediante **Docker Compose**, diseñado para entornos de producción y desarrollo portable:
+
+- **Prometheus (`:9091`):** Recolecta y almacena series temporales métricas expuestas por la aplicación Go en el puerto `2112`.
+- **Grafana (`:3000`):** Interfaz visual con aprovisionamiento automático de dashboards y fuentes de datos.
+- **Loki (`:3100`):** Sistema de agregación de logs escalable.
+- **Grafana Alloy:** Agente colector que procesa y reenvía los logs del sistema (`app.log`) hacia Loki para correlación en tiempo real.
+
+### ⚙️ Aprovisionamiento Automático
+Las fuentes de datos (`Prometheus`, `Loki`) y los paneles gráficos están completamente automatizados mediante código en la carpeta `/grafana/provisioning`, garantizando que al levantar los contenedores con Docker Compose, el dashboard de rendimiento y logs esté listo de inmediato sin configuración manual.
+
 ## Cómo ejecutar el proyecto y sus componentes
 
 ### 1. Iniciar la infraestructura de soporte (Broker, Caché y Observabilidad)
