@@ -131,7 +131,7 @@ func main() {
 		}
 	}()
 
-	fmt.Println("\n[Sistema]: En ejecución. Presiona Ctrl+C en cualquier momento para probar el Graceful Shutdown.\n")
+	fmt.Println("[Sistema]: En ejecución. Presiona Ctrl+C en cualquier momento para probar el Graceful Shutdown.")
 
 	// 8. Esperamos la señal de apagado del sistema operativo (Ctrl+C o SIGTERM)
 	<-stopChan

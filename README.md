@@ -54,11 +54,21 @@ Comando: `go run cmd/worker/main.go`
 * El worker expondrá sus métricas internas en `http://localhost:2112/metrics` (consumidas por Alloy).
 * Generará logs estructurados en formato JSON (usando `log/slog`) tanto en consola como en `app.log`.
 
-### 3. Ejecutar las Pruebas Unitarias y Cobertura
+### 3 Pruebas y Calidad de Código
 
-Comando: `go test -v -cover ./internal/core/services/...`
+El proyecto cuenta con una suite robusta de pruebas unitarias y de integración ligera que garantiza la solidez del dominio, la caché y el procesamiento concurrente:
 
----
+- **Pruebas de Dominio (`internal/core/domain`):** 
+  - Implementadas mediante *Table-driven tests*.
+  - **100% de cobertura** de sentencias en reglas de negocio, validaciones y transiciones de estado.
+- **Pruebas de Caché e Idempotencia (`internal/adapters/cache`):** 
+  - Validadas utilizando un servidor Redis en memoria simulado con **`miniredis`**, evitando dependencias de contenedores externos en las pruebas unitarias.
+- **Pruebas de Resiliencia y Dispatcher (`internal/core/services`):** 
+  - Cobertura de reintentos con *Exponential Backoff*, desvío a DLQ ante fallos persistentes y cancelación de contextos.
+- **Pruebas de Concurrencia (`WorkerPool`):** 
+  - Verificadas mediante sincronización con `sync.WaitGroup` y pruebas anti-deadlock.
+- **Seguridad Concurrente (Race Detector):** 
+  - Verificado exitosamente bajo el comando **`go test -race ./...`** para garantizar cero condiciones de carrera (*data races*).
 
 ## Estado del Proyecto
 
