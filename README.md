@@ -36,15 +36,16 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 
 ## 📊 Stack de Observabilidad y Monitoreo
 
-El proyecto incluye un entorno completo de observabilidad contenerizado y automatizado mediante **Docker Compose**, diseñado para entornos de producción y desarrollo portable:
+El proyecto cuenta con un ecosistema completo de observabilidad contenerizado y automatizado mediante **Docker Compose**, diseñado bajo principios de aplicaciones nativas de la nube (12-Factor App):
 
-- **Prometheus (`:9091`):** Recolecta y almacena series temporales métricas expuestas por la aplicación Go en el puerto `2112`.
-- **Grafana (`:3000`):** Interfaz visual con aprovisionamiento automático de dashboards y fuentes de datos.
+- **Worker de Go (`:2112`):** Aplicación backend empaquetada en un contenedor optimizado mediante *multi-stage build*, que emite métricas de Prometheus y logs estructurados directamente a la salida estándar (`stdout`).
+- **Prometheus (`:9091`):** Recolecta y almacena series temporales métricas expuestas por el worker.
+- **Grafana (`:3000`):** Interfaz visual con aprovisionamiento automático de dashboards y fuentes de datos protegidos con UIDs fijos.
 - **Loki (`:3100`):** Sistema de agregación de logs escalable.
-- **Grafana Alloy:** Agente colector que procesa y reenvía los logs del sistema (`app.log`) hacia Loki para correlación en tiempo real.
+- **Grafana Alloy:** Agente colector conectado al socket de Docker (`/var/run/docker.sock`) que descubre automáticamente los contenedores, extrae sus logs de `stdout` en tiempo real y los reenvía a Loki.
 
-### ⚙️ Aprovisionamiento Automático
-Las fuentes de datos (`Prometheus`, `Loki`) y los paneles gráficos están completamente automatizados mediante código en la carpeta `/grafana/provisioning`, garantizando que al levantar los contenedores con Docker Compose, el dashboard de rendimiento y logs esté listo de inmediato sin configuración manual.
+### ⚙️ Arquitectura sin archivos locales
+A diferencia de los enfoques tradicionales, este sistema **no requiere archivos de log físicos en el host** (como `app.log`). Todo el flujo de logs viaja de manera limpia desde el contenedor hacia Loki, garantizando portabilidad total al clonar el repositorio en cualquier máquina.
 
 ## Cómo ejecutar el proyecto y sus componentes
 
@@ -92,4 +93,4 @@ El proyecto cuenta con una suite robusta de pruebas unitarias y de integración 
 * [x] Fase 6: Pruebas Unitarias con Mocks y verificación de cobertura[cite: 1].
 * [x] Fase 7: Implementación de Pipeline CI/CD con GitHub Actions y Docker.
 * [x] Fase 8: Integración de Observabilidad (Métricas con Prometheus).
-* [ ] Fase 9: Dashboards de Grafana e Integración con Testcontainers.
+* [x] Fase 9: Dashboards de Grafana e Integración con Testcontainers.

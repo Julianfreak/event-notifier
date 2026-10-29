@@ -303,7 +303,7 @@
                       "spec": {
                         "direction": "backward",
                         "editorMode": "code",
-                        "expr": "{filename=\"/var/log/app.log\"}",
+                        "expr": "{container=\"event_notifier_worker\"}",
                         "queryType": "range"
                       }
                     },

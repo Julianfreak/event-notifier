@@ -47,15 +47,22 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 2. Conectamos con Redis (localhost:6379)
-	redisRepo, err := cache.NewRedisIdempotencyStorage("localhost:6379", "", 0)
+	// 2. Conectamos con Redis (lee de variable de entorno o usa localhost por defecto)
+	redisHost := os.Getenv("REDIS_HOST")
+	if redisHost == "" {
+		redisHost = "localhost:6379"
+	}
+	redisRepo, err := cache.NewRedisIdempotencyStorage(redisHost, "", 0)
 	if err != nil {
 		log.Fatalf("Error conectando con Redis: %v", err)
 	}
-	fmt.Println("[Redis]: Conexión establecida exitosamente.")
+	fmt.Printf("[Redis]: Conexión establecida exitosamente en %s.\n", redisHost)
 
 	// 3. Conectamos con RabbitMQ e inicializamos Colas, DLX y DLQ
-	amqpURL := "amqp://guest:guest@localhost:5672/"
+	amqpURL := os.Getenv("RABBITMQ_URL")
+	if amqpURL == "" {
+		amqpURL = "amqp://guest:guest@localhost:5672/"
+	}
 	exchange := "notificaciones_exchange"
 	queue := "cola_notificaciones"
 	routingKey := "notificaciones.envio"

@@ -1,31 +1,36 @@
-# Etapa 1: Compilación de la aplicación Go
-FROM golang:1.24-alpine AS builder
+# --- ETAPA 1: Construcción del binario ---
+FROM golang:alpine AS builder
 
-ENV GOTOOLCHAIN=auto
+# Instalar git y dependencias necesarias para compilar si aplica
+RUN apk add --no-cache git
 
-# Directorio de trabajo dentro del contenedor de compilación
+# Establecer el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
-# Copiar archivos de dependencias primero para aprovechar el caché de capas de Docker
+# Copilar dependencias primero para aprovechar la caché de Docker
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copiar el resto del código fuente del proyecto
+# Copiar el código fuente del proyecto
 COPY . .
 
-# Compilar el binario estático del worker asegurando compatibilidad con Linux
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/bin/worker ./cmd/worker/main.go
+# Compilar el binario estático de Go
+# -ldflags="-s -w" elimina información de depuración para reducir el tamaño del binario
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/bin/worker ./cmd/worker/main.go
 
-# Etapa 2: Imagen final ligera para ejecución en producción
-FROM alpine:latest
+# --- ETAPA 2: Imagen final ligera para producción ---
+FROM alpine:3.19
+
+# Instalar certificados CA por si se requieren llamadas TLS externas
+RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 
-# Instalar certificados raíz por si el worker realiza conexiones HTTPS externas
-RUN apk --no-cache add ca-certificates
-
-# Copiar el binario compilado desde la primera etapa
+# Copiar el binario compilado desde la etapa anterior
 COPY --from=builder /app/bin/worker /app/worker
 
-# Comando por defecto para ejecutar el motor asíncrono de notificaciones
-CMD ["./worker"]
+# Exponer el puerto de métricas Prometheus de la aplicación
+EXPOSE 2112
+
+# Comando por defecto para ejecutar el worker
+CMD ["/app/worker"]
