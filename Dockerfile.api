@@ -1,0 +1,30 @@
+# --- ETAPA 1: Construcción del binario de la API ---
+FROM golang:alpine AS builder
+
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# Compilar el binario estático para la API apuntando a ./cmd/api/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/bin/api ./cmd/api/main.go
+
+# --- ETAPA 2: Imagen final ligera para producción ---
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /app
+
+# Copiar el binario compilado de la API
+COPY --from=builder /app/bin/api /app/api
+
+# Exponer el puerto de la API REST
+EXPOSE 8080
+
+# Comando por defecto para ejecutar la API
+CMD ["/app/api"]

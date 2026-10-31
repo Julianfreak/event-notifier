@@ -14,6 +14,9 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 - `internal/adapters/broker`: Adaptador de RabbitMQ (Exchange directo durable, colas persistentes, control QoS y manual Ack/Nack).
 - `internal/adapters/cache`: Adaptador de Redis para control de idempotencia distribuida (prevención estricta de mensajes duplicados con SetNX).
 - `cmd/worker`: Punto de entrada del servicio consumidor con soporte de Graceful Shutdown (SIGINT/SIGTERM).
+- `cmd/api`: Punto de entrada del servicio HTTP REST (Productor) para recibir peticiones externas y encolarlas en RabbitMQ.
+- `cmd/worker`: Punto de entrada del servicio consumidor asíncrono con soporte de Graceful Shutdown (SIGINT/SIGTERM).
+- `internal/adapters/http`: Adaptador de entrada HTTP para la validación y transformación de payloads REST hacia el dominio.
 
 ---
 
@@ -52,7 +55,7 @@ El sistema **no requiere archivos de log físicos en el host**. Todo el flujo de
 
 Todo el ecosistema (incluyendo la infraestructura de soporte y el worker de Go) se levanta de manera unificada mediante Docker Compose:
 
-### 1. Levantar el Stack Completo (Infraestructura + Worker)
+### 1. Levantar el Stack Completo (Infraestructura, Worker y API REST)
 
 Ejecuta el siguiente comando en la raíz del proyecto para construir y poner en marcha todos los servicios:
 
@@ -68,6 +71,7 @@ Esto desplegará los siguientes servicios accesibles:
 * **RabbitMQ (Gestión de Colas):** http://localhost:15672 (Usuario/Contraseña: `guest` / `guest`)
 * **Worker de Go (Métricas expuestas):** http://localhost:2112/metrics
 * **Loki & Alloy:** Operando de forma transparente en background recolectando telemetría.
+* **API REST (:8080):** Punto de entrada HTTP para enviar notificaciones (POST /api/v1/notifications).
 
 ### 2. Pruebas y Calidad de Código
 
