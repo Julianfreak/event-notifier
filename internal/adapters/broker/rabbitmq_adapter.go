@@ -235,3 +235,18 @@ func (r *RabbitMQAdapter) Cerrar() error {
 	}
 	return r.conn.Close()
 }
+
+// Ping verifica que la conexión y el canal con RabbitMQ estén activos y operativos
+func (r *RabbitMQAdapter) Ping(ctx context.Context) error {
+	// 1. Validar si la conexión TCP física está cerrada
+	if r.conn == nil || r.conn.IsClosed() {
+		return fmt.Errorf("la conexión con RabbitMQ está cerrada o es nula")
+	}
+
+	// 2. Validar si el canal AMQP virtual está cerrado
+	if r.ch == nil || r.ch.IsClosed() {
+		return fmt.Errorf("el canal de RabbitMQ está cerrado o es nulo")
+	}
+
+	return nil
+}

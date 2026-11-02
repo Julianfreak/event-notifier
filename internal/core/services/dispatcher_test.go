@@ -34,6 +34,9 @@ func (m *MockIdempotencyRepo) MarcarProcesado(ctx context.Context, key string, t
 	m.claveMarcada = key
 	return m.marcarProcesadoErr
 }
+func (m *MockIdempotencyRepo) Ping(ctx context.Context) error {
+	return nil
+}
 
 // ==========================================================
 // 2. SUITE DE PRUEBAS UNITARIAS PARA EL DESPACHADOR

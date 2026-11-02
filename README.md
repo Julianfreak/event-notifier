@@ -46,6 +46,32 @@ El proyecto cuenta con un ecosistema completo de observabilidad contenerizado y 
 - **Loki (`:3100`):** Sistema de agregación de logs escalable.
 - **Grafana Alloy:** Agente colector conectado al socket de Docker (`/var/run/docker.sock`) que descubre automáticamente el contenedor del worker, extrae sus logs de `stdout` en tiempo real y los reenvía a Loki.
 
+## 🩺 Monitoreo de Salud y Readiness (Sondas)
+
+La API REST incluye endpoints dedicados para integrarse con orquestadores de contenedores (como Kubernetes, Docker Swarm o ECS) y garantizar la alta disponibilidad:
+
+* **`GET /healthz` (Liveness Probe):** 
+  * **Descripción:** Verifica que el proceso HTTP de la API esté vivo y respondiendo.
+  * **Respuesta exitosa (`200 OK`):**
+    ```json
+    {
+      "status": "alive",
+      "service": "event-notifier-api"
+    }
+    ```
+
+* **`GET /readyz` (Readiness Probe):** 
+  * **Descripción:** Comprueba de forma activa la conectividad con las dependencias críticas de infraestructura: **RabbitMQ** y **Redis**.
+  * **Respuesta exitosa (`200 OK`):**
+    ```json
+    {
+      "status": "ready",
+      "rabbitmq": "connected",
+      "redis": "connected"
+    }
+    ```
+  * **Respuesta de fallo (`503 Service Unavailable`):** Se activa automáticamente si alguna de las dependencias no responde dentro del tiempo límite, evitando que el balanceador envíe tráfico al nodo afectado.
+
 ### ⚙️ Arquitectura limpia sin archivos locales
 El sistema **no requiere archivos de log físicos en el host**. Todo el flujo de logs viaja de manera limpia desde el contenedor hacia Loki mediante el socket de Docker, garantizando portabilidad total al clonar el repositorio.
 
@@ -95,5 +121,6 @@ El proyecto cuenta con una suite robusta de pruebas unitarias y de integración 
 * [x] Fase 7: Pipeline CI/CD con GitHub Actions y Docker.
 * [x] Fase 8: Stack de Observabilidad completo (Prometheus, Loki, Grafana, Alloy).
 * [x] Fase 9: Contenedorización avanzada del Worker y aprovisionamiento automático por código.
+* [x] Fase 10: Monitoreo de Salud y Readiness (Sondas)
 
 ```

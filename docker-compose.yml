@@ -89,7 +89,7 @@ services:
       - "8080:8080"
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
-      - PORT=8080
+      - REDIS_URL=event_notifier_redis:6379
     depends_on:
       - rabbitmq
     restart: on-failure

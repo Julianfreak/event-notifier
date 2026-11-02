@@ -15,6 +15,7 @@ import (
 type IdempotencyRepository interface {
 	EsDuplicado(ctx context.Context, key string) (bool, error)
 	MarcarProcesado(ctx context.Context, key string, ttl time.Duration) error
+	Ping(ctx context.Context) error
 }
 
 // EventPublisher define el contrato para publicar eventos hacia el broker (RabbitMQ)

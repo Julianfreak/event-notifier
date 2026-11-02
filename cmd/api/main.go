@@ -1,20 +1,24 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"event-notifier/internal/adapters/broker"
 	httpadapter "event-notifier/internal/adapters/http"
+
+	"event-notifier/internal/adapters/cache"
 )
 
 func main() {
 	log.Println("==========================================================")
-	log.Println("   Event Notifier - API REST Adaptador de Entrada         ")
+	log.Println("   Event Notifier - API REST con Health & Readiness       ")
 	log.Println("==========================================================")
 
-	// 1. Conectar con RabbitMQ usando las variables de entorno
 	amqpURL := os.Getenv("RABBITMQ_URL")
 	if amqpURL == "" {
 		amqpURL = "amqp://guest:guest@localhost:5672/"
@@ -29,22 +33,65 @@ func main() {
 		log.Fatalf("Error conectando con RabbitMQ desde la API: %v", err)
 	}
 	defer rabbitAdapter.Cerrar()
-	log.Println("[RabbitMQ]: Conexión establecida para la API REST.")
 
-	// 2. Inicializar Handler HTTP inyectando el adaptador de RabbitMQ
+	redisAddr := os.Getenv("REDIS_URL")
+	if redisAddr == "" {
+		redisAddr = "event_notifier_redis:6379"
+	}
+
+	// Instanciamos el adaptador de Redis (ajusta el constructor según tu implementación en internal/adapters/cache)
+	redisAdapter, err := cache.NewRedisIdempotencyStorage(redisAddr, "", 0)
+	if err != nil {
+		log.Fatalf("Error conectando con Redis desde la API: %v", err)
+	}
 	handler := httpadapter.NewNotificationHandler(rabbitAdapter)
 
-	// 3. Configurar Rutas con el enrutador estándar de Go
 	mux := http.NewServeMux()
 
-	// Endpoint principal para enviar notificaciones
+	// 1. Ruta principal para enviar notificaciones
 	mux.HandleFunc("POST /api/v1/notifications", handler.HandleSendNotification)
 
-	// Health check básico de la API
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	// 2. Liveness Probe (/healthz)
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"API REST funcionando correctamente"}`))
+		w.Write([]byte(`{"status":"alive","service":"event-notifier-api"}`))
+	})
+
+	// Readiness Probe (/readyz) - Verifica RabbitMQ y Redis
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+
+		w.Header().Set("Content-Type", "application/json")
+
+		// 1. Verificar RabbitMQ
+		if err := rabbitAdapter.Ping(ctx); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]any{
+				"status": "not ready",
+				"error":  "RabbitMQ no disponible: " + err.Error(),
+			})
+			return
+		}
+
+		// 2. Verificar Redis
+		if err := redisAdapter.Ping(ctx); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]any{
+				"status": "not ready",
+				"error":  "Redis no disponible: " + err.Error(),
+			})
+			return
+		}
+
+		// Si ambas dependencias responden correctamente
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{
+			"status":   "ready",
+			"rabbitmq": "connected",
+			"redis":    "connected",
+		})
 	})
 
 	port := os.Getenv("PORT")

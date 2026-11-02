@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"event-notifier/internal/core/ports"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // redisIdempotencyStorage implementa el puerto ports.IdempotencyRepository
@@ -66,4 +66,10 @@ func (r *redisIdempotencyStorage) MarcarProcesado(ctx context.Context, key strin
 	}
 
 	return nil
+}
+
+// Ping verifica la conectividad activa con el servidor Redis
+func (r *redisIdempotencyStorage) Ping(ctx context.Context) error {
+	// Si 'client' es tu instancia de go-redis
+	return r.client.Ping(ctx).Err()
 }
