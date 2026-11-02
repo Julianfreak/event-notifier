@@ -121,6 +121,6 @@ El proyecto cuenta con una suite robusta de pruebas unitarias y de integración 
 * [x] Fase 7: Pipeline CI/CD con GitHub Actions y Docker.
 * [x] Fase 8: Stack de Observabilidad completo (Prometheus, Loki, Grafana, Alloy).
 * [x] Fase 9: Contenedorización avanzada del Worker y aprovisionamiento automático por código.
-* [x] Fase 10: Monitoreo de Salud y Readiness (Sondas)
+* [x] Fase 10: Monitoreo de Salud y Readiness (Sondas).
 
 ```
