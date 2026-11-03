@@ -46,15 +46,33 @@ El proyecto cuenta con un ecosistema completo de observabilidad contenerizado y 
 - **Loki (`:3100`):** Sistema de agregación de logs escalable.
 - **Grafana Alloy:** Agente colector conectado al socket de Docker (`/var/run/docker.sock`) que descubre automáticamente el contenedor del worker, extrae sus logs de `stdout` en tiempo real y los reenvía a Loki.
 
+---
+
+## ⚙️ Configuración del Entorno (Variables de Entorno)
+
+Este proyecto utiliza un archivo `.env` para gestionar de forma segura las credenciales y los parámetros de configuración de la infraestructura (Docker Compose).
+
+### 1. Configurar las variables locales
+
+Antes de levantar los servicios por primera vez, debes crear tu propio archivo `.env` a partir de la plantilla de ejemplo provista (`.env.example`):
+
+```bash
+# Copia la plantilla de ejemplo
+cp .env.example .env
+```
+
+---
+
 ## 🩺 Monitoreo de Salud y Readiness (Sondas)
 
-La API REST incluye endpoints dedicados para integrarse con orquestadores de contenedores (como Kubernetes, Docker Swarm, ECS) y garantizar la alta disponibilidad mediante observabilidad nativa.
+La API REST incluye endpoints dedicados para integrarse con orquestadores de contenedores (como Kubernetes, Docker Swarm y ECS) y garantizar la alta disponibilidad mediante observabilidad nativa.
 
-### Endpoints Disponibles
+### Endpoints disponibles
 
-- **`GET /healthz` (Liveness Probe):** 
+- **`GET /healthz` (Liveness Probe):**
   - **Descripción:** Verifica que el proceso HTTP de la API esté activo, vivo y respondiendo peticiones.
   - **Respuesta exitosa (`200 OK`):**
+
     ```json
     {
       "status": "alive",
@@ -62,9 +80,10 @@ La API REST incluye endpoints dedicados para integrarse con orquestadores de con
     }
     ```
 
-- **`GET /readyz` (Readiness Probe):** 
+- **`GET /readyz` (Readiness Probe):**
   - **Descripción:** Comprueba de forma activa y en tiempo real la conectividad con las dependencias críticas de infraestructura: **RabbitMQ** y **Redis**.
   - **Respuesta exitosa (`200 OK`):**
+
     ```json
     {
       "status": "ready",
@@ -72,7 +91,9 @@ La API REST incluye endpoints dedicados para integrarse con orquestadores de con
       "redis": "connected"
     }
     ```
-  - **Respuesta de fallo (`503 Service Unavailable`):** Se activa automáticamente si alguna de las dependencias no responde dentro del tiempo límite, previniendo que el balanceador envíe tráfico al contenedor afectado:
+
+  - **Respuesta de fallo (`503 Service Unavailable`):** Se activa automáticamente si alguna de las dependencias no responde dentro del tiempo límite, previniendo que el balanceador envíe tráfico al contenedor afectado.
+
     ```json
     {
       "status": "not ready",
@@ -82,35 +103,43 @@ La API REST incluye endpoints dedicados para integrarse con orquestadores de con
 
 ---
 
-### 🧪 Cómo realizar pruebas (Clientes HTTP y Herramientas)
+### 🧪 Cómo realizar pruebas (Clientes HTTP y herramientas)
 
-Puedes validar el funcionamiento de las sondas utilizando tu herramienta o técnica preferida (*Nota: asegúrate de utilizar el puerto `8081` si configuraste un reenvío personalizado en tu entorno local*):
+Puedes validar el funcionamiento de las sondas utilizando tu herramienta o técnica preferida.
+
+> **Nota:** Asegúrate de utilizar el puerto `8081` si configuraste un reenvío personalizado en tu entorno local.
 
 #### 1. Clientes HTTP (Insomnia, Postman, Thunder Client)
-Ideal para desarrollo diario y pruebas interactivas:
+
+Ideal para el desarrollo diario y las pruebas interactivas:
+
 1. Crea una nueva petición HTTP seleccionando el método **`GET`**.
 2. Ingresa la URL correspondiente según la sonda que desees probar:
-   * **Liveness:** `http://localhost:8081/healthz`
-   * **Readiness:** `http://localhost:8081/readyz`
+   - **Liveness:** `http://localhost:8081/healthz`
+   - **Readiness:** `http://localhost:8081/readyz`
 3. Haz clic en **Send** para inspeccionar la respuesta JSON y el código de estado (`200 OK` o `503 Service Unavailable`).
 
-#### 2. Desde la Terminal con `curl` (CLI)
+#### 2. Desde la terminal con `curl` (CLI)
+
 Útil para scripts de automatización, diagnósticos rápidos o entornos sin interfaz gráfica:
+
 ```bash
 # Probar Liveness
 curl -i http://localhost:8081/healthz
 
 # Probar Readiness
 curl -i http://localhost:8081/readyz
+```
 
 ### ⚙️ Arquitectura limpia sin archivos locales
+
 El sistema **no requiere archivos de log físicos en el host**. Todo el flujo de logs viaja de manera limpia desde el contenedor hacia Loki mediante el socket de Docker, garantizando portabilidad total al clonar el repositorio.
 
 ---
 
-## Cómo ejecutar el proyecto y sus componentes
+## 🚀 Cómo ejecutar el proyecto y sus componentes
 
-Todo el ecosistema (incluyendo la infraestructura de soporte y el worker de Go) se levanta de manera unificada mediante Docker Compose:
+Todo el ecosistema (incluyendo la infraestructura de soporte y el worker de Go) se levanta de manera unificada mediante Docker Compose.
 
 ### 1. Levantar el Stack Completo (Infraestructura, Worker y API REST)
 
@@ -118,7 +147,6 @@ Ejecuta el siguiente comando en la raíz del proyecto para construir y poner en 
 
 ```bash
 docker compose up --build -d
-
 ```
 
 Esto desplegará los siguientes servicios accesibles:

@@ -3,7 +3,13 @@ services:
     image: redis:7-alpine
     container_name: event_notifier_redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:${REDIS_PORT:-6379}"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     restart: "no"
 
   rabbitmq:
@@ -12,9 +18,15 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     restart: "no"
 
   prometheus:
@@ -73,8 +85,8 @@ services:
     ports:
       - "2112:2112"
     environment:
-      - REDIS_HOST=redis:6379
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - REDIS_HOST=${REDIS_HOST}:${REDIS_PORT}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@${RABBITMQ_HOST}:${RABBITMQ_PORT}/
     depends_on:
       - redis
       - rabbitmq
@@ -86,10 +98,10 @@ services:
       dockerfile: Dockerfile.api
     container_name: event_notifier_api
     ports:
-      - "8081:8080"
+      - "${API_PORT}:8080"
     environment:
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
-      - REDIS_URL=event_notifier_redis:6379
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@${RABBITMQ_HOST}:${RABBITMQ_PORT}/
+      - REDIS_URL=${REDIS_HOST}:${REDIS_PORT}
       - PORT=8080
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
@@ -98,6 +110,8 @@ services:
       retries: 3 
       start_period: 5s
     depends_on:
-      - rabbitmq
-      - redis
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     restart: on-failure
