@@ -86,10 +86,18 @@ services:
       dockerfile: Dockerfile.api
     container_name: event_notifier_api
     ports:
-      - "8080:8080"
+      - "8081:8080"
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - REDIS_URL=event_notifier_redis:6379
+      - PORT=8080
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 10s     
+      timeout: 5s
+      retries: 3 
+      start_period: 5s
     depends_on:
       - rabbitmq
+      - redis
     restart: on-failure

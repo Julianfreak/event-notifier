@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/bin/worker ./cmd/
 FROM alpine:3.19
 
 # Instalar certificados CA por si se requieren llamadas TLS externas
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache wget ca-certificates tzdata
 
 WORKDIR /app
 
