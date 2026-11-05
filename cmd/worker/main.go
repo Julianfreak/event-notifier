@@ -88,9 +88,14 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := rabbitAdapter.IniciarConsumo(ctx, func(n *domain.Notificacion) error {
+		err := rabbitAdapter.IniciarConsumo(ctx, func(msgCtx context.Context, n *domain.Notificacion) error {
+			// Opcional: podemos extraer el logger estructurado del contexto para logs específicos
+			if logger, ok := msgCtx.Value("logger").(*slog.Logger); ok {
+				logger.Info("Iniciando despacho con resiliencia", "notif_id", n.ID)
+			}
+
 			// Toda la lógica de reintentos y desvío a DLQ ocurre dentro del dispatcher
-			return dispatcher.DespacharConResiliencia(ctx, n)
+			return dispatcher.DespacharConResiliencia(msgCtx, n)
 		})
 		if err != nil {
 			log.Printf("[Consumidor]: Finalizado: %v", err)

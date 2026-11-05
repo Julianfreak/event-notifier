@@ -103,6 +103,14 @@ La API REST incluye endpoints dedicados para integrarse con orquestadores de con
 
 ---
 
+## 🔍 Trazabilidad Distribuida (Correlation IDs y Request IDs)
+
+El sistema implementa trazabilidad de extremo a extremo para seguir el ciclo de vida completo de una solicitud a través de los microservicios y canales asíncronos:
+
+1. **API REST Middleware (`RequestIDMiddleware`)**: Intercepta cada petición HTTP entrante. Si el cliente incluye el header `X-Request-ID`, lo reutiliza; de lo contrario, genera un **UUID v4** único. Este ID se inyecta en el contexto de Go y se devuelve en la respuesta HTTP.
+2. **Propagación en RabbitMQ (`X-Correlation-ID`)**: Al publicar un evento desde la API, el adaptador AMQP extrae el identificador del contexto y lo inyecta automáticamente en las cabeceras (*Headers*) del mensaje bajo la clave `X-Correlation-ID`.
+3. **Consumo y Logs en el Worker**: El worker extrae esta cabecera al procesar el mensaje, vinculándola al contexto de ejecución y configurando un logger estructurado (`slog`) con el campo `correlation_id`, facilitando su consulta y filtrado en Grafana / Loki.
+
 ### 🧪 Cómo realizar pruebas (Clientes HTTP y herramientas)
 
 Puedes validar el funcionamiento de las sondas utilizando tu herramienta o técnica preferida.

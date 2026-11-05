@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 
+	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"event-notifier/internal/core/domain"
+	"event-notifier/internal/middleware"
 )
 
 type RabbitMQAdapter struct {
@@ -171,7 +174,7 @@ func (r *RabbitMQAdapter) Publicar(ctx context.Context, n *domain.Notificacion) 
 	)
 }
 
-func (r *RabbitMQAdapter) IniciarConsumo(ctx context.Context, handler func(n *domain.Notificacion) error) error {
+func (r *RabbitMQAdapter) IniciarConsumo(ctx context.Context, handler func(ctx context.Context, n *domain.Notificacion) error) error {
 	err := r.ch.Qos(1, 0, false)
 	if err != nil {
 		return fmt.Errorf("error configurando QoS: %w", err)
@@ -204,27 +207,39 @@ func (r *RabbitMQAdapter) IniciarConsumo(ctx context.Context, handler func(n *do
 				return nil
 			}
 
+			// 1. Extraer Correlation ID de las cabeceras AMQP
+			correlationID := ""
+			if entrega.Headers != nil {
+				if val, ok := entrega.Headers["X-Correlation-ID"].(string); ok {
+					correlationID = val
+				}
+			}
+			if correlationID == "" {
+				correlationID = uuid.New().String() // Fallback si el mensaje vino de otra fuente sin ID
+			}
+
+			// 2. Crear un contexto y un logger estructurado con el correlation_id
+			msgCtx := context.WithValue(ctx, "correlation_id", correlationID)
+			logger := slog.With("correlation_id", correlationID)
+			msgCtx = context.WithValue(msgCtx, "logger", logger)
+
 			var notif domain.Notificacion
 			if err := json.Unmarshal(entrega.Body, &notif); err != nil {
-				log.Printf("[RabbitMQ]: Mensaje corrupto. Descartando a DLQ: %v", err)
-				// Nack(requeue = false): Envía automáticamente el mensaje corrupto a la DLQ
+				logger.Error("Mensaje corrupto. Descartando a DLQ", "error", err)
 				entrega.Nack(false, false)
 				continue
 			}
 
-			// Ejecutamos la función de procesamiento que incluye los reintentos
-			if err := handler(&notif); err != nil {
-				log.Printf("[RabbitMQ]: Fallo definitivo en notificación %s tras reintentos: %v", notif.ID, err)
-				// ¡PUNTO CLAVE DE RESILIENCIA!:
-				// Al agotar los reintentos, ejecutamos Nack(requeue: false).
-				// Como la cola tiene configurado x-dead-letter-exchange, RabbitMQ NO destruye el mensaje,
-				// sino que lo rutea a 'cola_notificaciones_dlq'.
+			// 3. Ejecutamos la función de procesamiento pasando el msgCtx enriquecido
+			if err := handler(msgCtx, &notif); err != nil {
+				logger.Error("Fallo definitivo en notificación tras reintentos", "id", notif.ID, "error", err)
 				entrega.Nack(false, false)
 				continue
 			}
 
 			// Confirmación exitosa
 			entrega.Ack(false)
+			logger.Info("Notificación procesada y confirmada exitosamente", "id", notif.ID)
 		}
 	}
 }
@@ -246,6 +261,46 @@ func (r *RabbitMQAdapter) Ping(ctx context.Context) error {
 	// 2. Validar si el canal AMQP virtual está cerrado
 	if r.ch == nil || r.ch.IsClosed() {
 		return fmt.Errorf("el canal de RabbitMQ está cerrado o es nulo")
+	}
+
+	return nil
+}
+
+// PublishNotificacion publica un evento hacia RabbitMQ propagando el Correlation ID
+func (r *RabbitMQAdapter) PublishNotificacion(ctx context.Context, notif *domain.Notificacion) error {
+	body, err := json.Marshal(notif)
+	if err != nil {
+		return fmt.Errorf("error serializando notificación: %w", err)
+	}
+
+	// 1. Extraer el Request ID del contexto HTTP (generado o recibido por el middleware)
+	reqID := middleware.GetRequestID(ctx)
+	if reqID == "" {
+		reqID = "unknown-request-id" // Fallback de seguridad
+	}
+
+	// 2. Definir las cabeceras AMQP con el Correlation ID
+	headers := amqp.Table{
+		"X-Correlation-ID": reqID,
+	}
+
+	pub := amqp.Publishing{
+		ContentType: "application/json",
+		Body:        body,
+		Headers:     headers,
+	}
+
+	// 3. Publicar usando PublishWithContext para mantener la trazabilidad y cancelación
+	err = r.ch.PublishWithContext(
+		ctx,
+		r.exchange,
+		r.routingKey,
+		false, // mandatory
+		false, // immediate
+		pub,
+	)
+	if err != nil {
+		return fmt.Errorf("error publicando en RabbitMQ: %w", err)
 	}
 
 	return nil

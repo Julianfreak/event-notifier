@@ -12,6 +12,7 @@ import (
 	httpadapter "event-notifier/internal/adapters/http"
 
 	"event-notifier/internal/adapters/cache"
+	"event-notifier/internal/middleware"
 )
 
 func main() {
@@ -100,7 +101,9 @@ func main() {
 	}
 
 	log.Printf("[HTTP Server]: API REST escuchando en el puerto %s...\n", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	handlerWithMiddleware := middleware.RequestIDMiddleware(mux)
+
+	if err := http.ListenAndServe(":"+port, handlerWithMiddleware); err != nil {
 		log.Fatalf("Error en el servidor HTTP: %v", err)
 	}
 }
