@@ -137,7 +137,30 @@ curl -i http://localhost:8081/healthz
 
 # Probar Readiness
 curl -i http://localhost:8081/readyz
+
+# Probar trazabilidad distribuida con Request IDs y Correlation IDs
+curl -i -X POST http://localhost:8081/api/v1/notifications
+
+cuyo body puede estar estructurado de la siguiente forma: 
+"{"id": "test-123", "canal": "email", "destinatario": "user@test.com", "mensaje": "Prueba de trazabilidad"}"
 ```
+
+## 📈 Pruebas de Carga y Estrés (k6)
+
+El proyecto incluye un script de pruebas de rendimiento y estrés implementado con **k6**, ubicado en la raíz del repositorio (`./load-test.js`), diseñado para evaluar la capacidad de respuesta de la API REST, el encolamiento en RabbitMQ y la concurrencia del Worker bajo picos de tráfico masivo.
+
+### Ejecución de Pruebas de Carga con Docker
+
+Puedes ejecutar la suite de pruebas de manera aislada utilizando la imagen oficial de k6, montando el directorio actual del proyecto:
+
+```bash
+docker run --rm \
+  -v "$(pwd):/scripts" \
+  -w /scripts \
+  --network host \
+  grafana/k6:2.3.0 run load-test.js
+```
+
 
 ### ⚙️ Arquitectura limpia sin archivos locales
 
@@ -189,5 +212,6 @@ El proyecto cuenta con una suite robusta de pruebas unitarias y de integración 
 * [x] Fase 8: Stack de Observabilidad completo (Prometheus, Loki, Grafana, Alloy).
 * [x] Fase 9: Contenedorización avanzada del Worker y aprovisionamiento automático por código.
 * [x] Fase 10: Monitoreo de Salud y Readiness (Sondas).
+* [x] Fase 11: Pruebas de carga y estrés con k6.
 
 ```
