@@ -1,0 +1,48 @@
+name: K6 Load Testing
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: # Permite ejecutar la prueba manualmente desde la pestaña Actions en GitHub
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Levantar stack completo con Docker Compose
+        run: docker compose up --build -d
+
+      - name: Esperar a que la API esté lista (Readiness Probe)
+        run: |
+          echo "Verificando disponibilidad de la API..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8081/readyz | grep -q "ready"; then
+              echo "¡API lista y dependencias conectadas!"
+              exit 0
+            fi
+            echo "Esperando servicios... intento $i/30"
+            sleep 2
+          done
+          echo "Timeout: La API no respondió a tiempo."
+          docker compose logs
+          exit 1
+
+      - name: Ejecutar pruebas de carga con k6
+        run: |
+          docker run --rm \
+            -v "$(pwd):/scripts" \
+            -w /scripts \
+            --network host \
+            grafana/k6:2.3.0 run load-test.js
+
+      - name: Limpiar contenedores de Docker Compose
+        if: always()
+        run: docker compose down
