@@ -155,6 +155,7 @@ Puedes ejecutar la suite de pruebas de manera aislada utilizando la imagen ofici
 
 ```bash
 docker run --rm \
+  --env-file .env \
   -v "$(pwd):/scripts" \
   -w /scripts \
   --network host \

@@ -17,7 +17,8 @@ export const options = {
 };
 
 export default function () {
-  const url = 'http://localhost:8081/api/v1/notifications';
+  const BASE_URL = __ENV.API_URL || 'http://localhost:8080';
+  const url = `${BASE_URL}/api/v1/notifications`;
   
   // Generamos IDs únicos para evitar colisiones de idempotencia indeseadas si testeamos procesamiento único,
   // o podemos repetir claves si queremos probar la efectividad del bloqueo de Redis (SetNX).
