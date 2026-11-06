@@ -10,9 +10,6 @@ jobs:
   test:
     name: Continuous Integration (CI) - Tests & Quality
     runs-on: ubuntu-latest
-    
-    # Servicios auxiliares si se requieren pruebas de integración futuras, 
-    # aunque el proyecto base utiliza pruebas unitarias con mocks.
     services:
       redis:
         image: redis:alpine
@@ -33,27 +30,28 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Set up Go 1.24
+      - name: Set up Go 1.25
         uses: actions/setup-go@v5
         with:
-          go-version: '^1.24'
+          go-version: '^1.25'
+          cache: true
 
       - name: Install dependencies
         run: go mod download
 
       - name: Run Unit Tests and Enforce 85% Coverage
         run: |
-          # 1. Ejecutar las pruebas generando un archivo de reporte de cobertura
-          go test -coverprofile=coverage.out ./internal/core/services/...
+          # 1. Ejecutar pruebas con detector de carreras (-race) cubriendo todo el proyecto
+          go test -v -race -coverprofile=coverage.out ./...
           
-          # 2. Extraer el porcentaje de la línea total del reporte
+          # 2. Extraer el porcentaje de cobertura total
           COVERAGE_STR=$(go tool cover -func=coverage.out | grep total: | awk '{print $3}')
           echo "Cobertura total obtenida: $COVERAGE_STR"
           
-          # 3. Remover el carácter '%' para obtener el valor numérico puro
+          # 3. Limpiar símbolo '%'
           COVERAGE_NUM=${COVERAGE_STR%\%}
           
-          # 4. Validar que la cobertura sea >= 85.0% utilizando awk
+          # 4. Validar umbral >= 85.0%
           PASSED=$(awk -v cov="$COVERAGE_NUM" 'BEGIN {print (cov >= 85.0) ? "1" : "0"}')
           
           if [ "$PASSED" -eq "1" ]; then
@@ -63,11 +61,21 @@ jobs:
             exit 1
           fi
 
-  build-and-push:
-    name: Continuous Deployment (CD) - Docker Image
+  build-and-push-images:
+    name: Continuous Deployment (CD) - Build & Push Docker Images
     needs: test
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - image: worker
+            dockerfile: Dockerfile
+            name: Worker Asíncrono
+          - image: api
+            dockerfile: Dockerfile.api
+            name: API REST
 
     steps:
       - name: Checkout source code
@@ -79,9 +87,12 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (${{ matrix.name }})
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ${{ matrix.dockerfile }}
           push: true
-          tags: saavedrabackdev/event-notifier:latest
+          tags: |
+            saavedrabackdev/event-notifier-${{ matrix.image }}:latest
+            saavedrabackdev/event-notifier-${{ matrix.image }}:${{ github.sha }}
