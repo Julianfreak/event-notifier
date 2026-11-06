@@ -5,7 +5,7 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # Permite ejecutar la prueba manualmente desde la pestaña Actions en GitHub
+  workflow_dispatch:
 
 jobs:
   load-test:
@@ -17,6 +17,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Crear archivo .env para el entorno de pruebas
+        run: |
+          if [ -f .env.example ]; then
+            cp .env.example .env
+            echo "Archivo .env generado a partir de .env.example"
+          else
+            echo "Creando .env con valores por defecto..."
+            echo "RABBITMQ_URL=amqp://guest:guest@localhost:5672/" >> .env
+            echo "REDIS_URL=localhost:6379" >> .env
+            echo "PORT=8080" >> .env
+          fi
+
       - name: Levantar stack completo con Docker Compose
         run: docker compose up --build -d
 
@@ -24,7 +36,7 @@ jobs:
         run: |
           echo "Verificando disponibilidad de la API..."
           for i in {1..30}; do
-            if curl -s http://localhost:8081/readyz | grep -q "ready"; then
+            if curl -s http://localhost:8080/readyz | grep -q "ready"; then
               echo "¡API lista y dependencias conectadas!"
               exit 0
             fi
