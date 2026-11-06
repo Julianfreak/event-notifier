@@ -48,3 +48,24 @@ func TestRedisIdempotencyStorage(t *testing.T) {
 		assert.Error(t, err, "Debería retornar error porque SetNX detecta que la clave ya existe")
 	})
 }
+func TestRedisIdempotencyStorage_Ping(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("No se pudo iniciar miniredis: %v", err)
+	}
+	defer mr.Close()
+
+	storage, err := NewRedisIdempotencyStorage(
+		mr.Addr(),
+		"",
+		0,
+	)
+	if err != nil {
+		t.Fatalf("No se pudo inicializar Redis: %v", err)
+	}
+
+	err = storage.Ping(context.Background())
+	if err != nil {
+		t.Errorf("Se esperaba que Ping fuera exitoso, se obtuvo: %v", err)
+	}
+}

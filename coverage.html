@@ -1,0 +1,896 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>broker: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">event-notifier/internal/adapters/broker/rabbitmq_adapter.go (3.9%)</option>
+				
+				<option value="file1">event-notifier/internal/adapters/cache/redis_idempotency.go (78.9%)</option>
+				
+				<option value="file2">event-notifier/internal/adapters/http/handler.go (100.0%)</option>
+				
+				<option value="file3">event-notifier/internal/core/domain/notification.go (100.0%)</option>
+				
+				<option value="file4">event-notifier/internal/core/services/dispatcher.go (88.9%)</option>
+				
+				<option value="file5">event-notifier/internal/core/services/worker_pool.go (100.0%)</option>
+				
+				<option value="file6">event-notifier/internal/middleware/request_id.go (75.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package broker
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+        "log"
+        "log/slog"
+
+        "github.com/google/uuid"
+        amqp "github.com/rabbitmq/amqp091-go"
+
+        "event-notifier/internal/core/domain"
+        "event-notifier/internal/middleware"
+)
+
+type RabbitMQAdapter struct {
+        conn       *amqp.Connection
+        ch         *amqp.Channel
+        exchange   string
+        queueName  string
+        routingKey string
+}
+
+func NewRabbitMQAdapter(url string, exchange string, queueName string, routingKey string) (*RabbitMQAdapter, error) <span class="cov0" title="0">{
+        // 1. Abrimos conexión TCP física
+        conn, err := amqp.Dial(url)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("fallo al conectar con RabbitMQ en %s: %w", url, err)
+        }</span>
+
+        // 2. Abrimos canal virtual sobre la conexión
+        <span class="cov0" title="0">ch, err := conn.Channel()
+        if err != nil </span><span class="cov0" title="0">{
+                conn.Close()
+                return nil, fmt.Errorf("fallo al abrir canal con RabbitMQ: %w", err)
+        }</span>
+
+        // -------------------------------------------------------------
+        // CONFIGURACIÓN DE LA DEAD LETTER QUEUE (DLQ)
+        // -------------------------------------------------------------
+        <span class="cov0" title="0">dlxExchange := exchange + "_dlx"
+        dlqQueueName := queueName + "_dlq"
+        dlqRoutingKey := routingKey + ".dead"
+
+        // A. Declaramos el Dead Letter Exchange (DLX)
+        err = ch.ExchangeDeclare(
+                dlxExchange,
+                "direct",
+                true,  // durable
+                false, // auto-deleted
+                false, // internal
+                false, // no-wait
+                nil,
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                ch.Close()
+                conn.Close()
+                return nil, fmt.Errorf("fallo al declarar DLX: %w", err)
+        }</span>
+
+        // B. Declaramos la Cola de Mensajes Muertos (DLQ)
+        <span class="cov0" title="0">_, err = ch.QueueDeclare(
+                dlqQueueName,
+                true,  // durable
+                false, // auto-delete
+                false, // exclusive
+                false, // no-wait
+                nil,
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                ch.Close()
+                conn.Close()
+                return nil, fmt.Errorf("fallo al declarar DLQ: %w", err)
+        }</span>
+
+        // C. Enlazamos la DLQ con el DLX
+        <span class="cov0" title="0">err = ch.QueueBind(
+                dlqQueueName,
+                dlqRoutingKey,
+                dlxExchange,
+                false,
+                nil,
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                ch.Close()
+                conn.Close()
+                return nil, fmt.Errorf("fallo al enlazar DLQ con DLX: %w", err)
+        }</span>
+
+        // -------------------------------------------------------------
+        // CONFIGURACIÓN DE LA COLA PRINCIPAL (Vinculada al DLX)
+        // -------------------------------------------------------------
+        // D. Declaramos el Exchange Principal
+        <span class="cov0" title="0">err = ch.ExchangeDeclare(
+                exchange,
+                "direct",
+                true,
+                false,
+                false,
+                false,
+                nil,
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                ch.Close()
+                conn.Close()
+                return nil, fmt.Errorf("fallo al declarar exchange principal: %w", err)
+        }</span>
+
+        // E. Declaramos la Cola Principal con argumentos de redirección a DLX
+        // amqp.Table define los metadatos 'x-dead-letter-*'
+        <span class="cov0" title="0">queueArgs := amqp.Table{
+                "x-dead-letter-exchange":    dlxExchange,
+                "x-dead-letter-routing-key": dlqRoutingKey,
+        }
+
+        _, err = ch.QueueDeclare(
+                queueName,
+                true,  // durable
+                false, // auto-delete
+                false, // exclusive
+                false, // no-wait
+                queueArgs,
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                ch.Close()
+                conn.Close()
+                return nil, fmt.Errorf("fallo al declarar cola principal con DLX: %w", err)
+        }</span>
+
+        // F. Enlazamos la Cola Principal al Exchange Principal
+        <span class="cov0" title="0">err = ch.QueueBind(
+                queueName,
+                routingKey,
+                exchange,
+                false,
+                nil,
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                ch.Close()
+                conn.Close()
+                return nil, fmt.Errorf("fallo al enlazar cola principal: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return &amp;RabbitMQAdapter{
+                conn:       conn,
+                ch:         ch,
+                exchange:   exchange,
+                queueName:  queueName,
+                routingKey: routingKey,
+        }, nil</span>
+}
+
+func (r *RabbitMQAdapter) Publicar(ctx context.Context, n *domain.Notificacion) error <span class="cov0" title="0">{
+        cuerpoJSON, err := json.Marshal(n)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("error al serializar notificación: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">mensaje := amqp.Publishing{
+                DeliveryMode: amqp.Persistent,
+                ContentType:  "application/json",
+                Body:         cuerpoJSON,
+                MessageId:    n.ID,
+        }
+
+        return r.ch.PublishWithContext(
+                ctx,
+                r.exchange,
+                r.routingKey,
+                false,
+                false,
+                mensaje,
+        )</span>
+}
+
+func (r *RabbitMQAdapter) IniciarConsumo(ctx context.Context, handler func(ctx context.Context, n *domain.Notificacion) error) error <span class="cov0" title="0">{
+        err := r.ch.Qos(1, 0, false)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("error configurando QoS: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">mensajes, err := r.ch.Consume(
+                r.queueName,
+                "",
+                false, // autoAck: false obligatorio
+                false,
+                false,
+                false,
+                nil,
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("error registrando consumidor: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">log.Printf("[RabbitMQ]: Consumidor escuchando en '%s' (DLQ activa en '%s_dlq')...", r.queueName, r.queueName)
+
+        for </span><span class="cov0" title="0">{
+                select </span>{
+                case &lt;-ctx.Done():<span class="cov0" title="0">
+                        log.Println("[RabbitMQ]: Contexto cancelado. Cerrando bucle de consumo.")
+                        return nil</span>
+
+                case entrega, abierta := &lt;-mensajes:<span class="cov0" title="0">
+                        if !abierta </span><span class="cov0" title="0">{
+                                log.Println("[RabbitMQ]: Canal cerrado por el broker.")
+                                return nil
+                        }</span>
+
+                        // 1. Extraer Correlation ID de las cabeceras AMQP
+                        <span class="cov0" title="0">correlationID := ""
+                        if entrega.Headers != nil </span><span class="cov0" title="0">{
+                                if val, ok := entrega.Headers["X-Correlation-ID"].(string); ok </span><span class="cov0" title="0">{
+                                        correlationID = val
+                                }</span>
+                        }
+                        <span class="cov0" title="0">if correlationID == "" </span><span class="cov0" title="0">{
+                                correlationID = uuid.New().String() // Fallback si el mensaje vino de otra fuente sin ID
+                        }</span>
+
+                        // 2. Crear un contexto y un logger estructurado con el correlation_id
+                        <span class="cov0" title="0">msgCtx := context.WithValue(ctx, "correlation_id", correlationID)
+                        logger := slog.With("correlation_id", correlationID)
+                        msgCtx = context.WithValue(msgCtx, "logger", logger)
+
+                        var notif domain.Notificacion
+                        if err := json.Unmarshal(entrega.Body, &amp;notif); err != nil </span><span class="cov0" title="0">{
+                                logger.Error("Mensaje corrupto. Descartando a DLQ", "error", err)
+                                entrega.Nack(false, false)
+                                continue</span>
+                        }
+
+                        // 3. Ejecutamos la función de procesamiento pasando el msgCtx enriquecido
+                        <span class="cov0" title="0">if err := handler(msgCtx, &amp;notif); err != nil </span><span class="cov0" title="0">{
+                                logger.Error("Fallo definitivo en notificación tras reintentos", "id", notif.ID, "error", err)
+                                entrega.Nack(false, false)
+                                continue</span>
+                        }
+
+                        // Confirmación exitosa
+                        <span class="cov0" title="0">entrega.Ack(false)
+                        logger.Info("Notificación procesada y confirmada exitosamente", "id", notif.ID)</span>
+                }
+        }
+}
+
+func (r *RabbitMQAdapter) Cerrar() error <span class="cov0" title="0">{
+        if err := r.ch.Close(); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">return r.conn.Close()</span>
+}
+
+// Ping verifica que la conexión y el canal con RabbitMQ estén activos y operativos
+func (r *RabbitMQAdapter) Ping(ctx context.Context) error <span class="cov8" title="1">{
+        // 1. Validar si la conexión TCP física está cerrada
+        if r.conn == nil || r.conn.IsClosed() </span><span class="cov8" title="1">{
+                return fmt.Errorf("la conexión con RabbitMQ está cerrada o es nula")
+        }</span>
+
+        // 2. Validar si el canal AMQP virtual está cerrado
+        <span class="cov0" title="0">if r.ch == nil || r.ch.IsClosed() </span><span class="cov0" title="0">{
+                return fmt.Errorf("el canal de RabbitMQ está cerrado o es nulo")
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+// PublishNotificacion publica un evento hacia RabbitMQ propagando el Correlation ID
+func (r *RabbitMQAdapter) PublishNotificacion(ctx context.Context, notif *domain.Notificacion) error <span class="cov8" title="1">{
+        if r.ch == nil || r.ch.IsClosed() </span><span class="cov8" title="1">{
+                return fmt.Errorf("el canal de RabbitMQ no está inicializado o está cerrado")
+        }</span>
+        <span class="cov0" title="0">body, err := json.Marshal(notif)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("error serializando notificación: %w", err)
+        }</span>
+
+        // 1. Extraer el Request ID del contexto HTTP (generado o recibido por el middleware)
+        <span class="cov0" title="0">reqID := middleware.GetRequestID(ctx)
+        if reqID == "" </span><span class="cov0" title="0">{
+                reqID = "unknown-request-id" // Fallback de seguridad
+        }</span>
+
+        // 2. Definir las cabeceras AMQP con el Correlation ID
+        <span class="cov0" title="0">headers := amqp.Table{
+                "X-Correlation-ID": reqID,
+        }
+
+        pub := amqp.Publishing{
+                ContentType: "application/json",
+                Body:        body,
+                Headers:     headers,
+        }
+
+        // 3. Publicar usando PublishWithContext para mantener la trazabilidad y cancelación
+        err = r.ch.PublishWithContext(
+                ctx,
+                r.exchange,
+                r.routingKey,
+                false, // mandatory
+                false, // immediate
+                pub,
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("error publicando en RabbitMQ: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package cache
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "event-notifier/internal/core/ports"
+
+        "github.com/redis/go-redis/v9"
+)
+
+// redisIdempotencyStorage implementa el puerto ports.IdempotencyRepository
+type redisIdempotencyStorage struct {
+        client *redis.Client
+}
+
+// NewRedisIdempotencyStorage es el constructor que inicializa la conexión con Redis
+func NewRedisIdempotencyStorage(addr string, password string, db int) (ports.IdempotencyRepository, error) <span class="cov1" title="1">{
+        rdb := redis.NewClient(&amp;redis.Options{
+                Addr:     addr,
+                Password: password,
+                DB:       db,
+        })
+
+        // Verificamos conectividad inmediata mediante un Ping con timeout de 3 segundos
+        ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+        defer cancel()
+
+        if err := rdb.Ping(ctx).Err(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("fallo de conexión con Redis en %s: %w", addr, err)
+        }</span>
+
+        <span class="cov1" title="1">return &amp;redisIdempotencyStorage{
+                client: rdb,
+        }, nil</span>
+}
+
+// EsDuplicado verifica si una IdempotencyKey ya fue registrada previamente en Redis
+func (r *redisIdempotencyStorage) EsDuplicado(ctx context.Context, key string) (bool, error) <span class="cov10" title="2">{
+        claveCompleta := fmt.Sprintf("idempotency:%s", key)
+
+        // Exists devuelve 1 si la clave existe, o 0 si no existe
+        resultado, err := r.client.Exists(ctx, claveCompleta).Result()
+        if err != nil </span><span class="cov0" title="0">{
+                return false, fmt.Errorf("error al consultar clave en Redis: %w", err)
+        }</span>
+
+        // Si resultado es mayor a 0, la clave ya existe (es un duplicado)
+        <span class="cov10" title="2">return resultado &gt; 0, nil</span>
+}
+
+// MarcarProcesado registra la clave usando SETNX de forma atómica con expiración (TTL)
+func (r *redisIdempotencyStorage) MarcarProcesado(ctx context.Context, key string, ttl time.Duration) error <span class="cov10" title="2">{
+        claveCompleta := fmt.Sprintf("idempotency:%s", key)
+
+        // SetNX (Set if Not eXists) intenta guardar el valor "PROCESADO" con el tiempo de vida (TTL).
+        // Si la clave ya existía, 'grabado' será false.
+        grabado, err := r.client.SetNX(ctx, claveCompleta, "PROCESADO", ttl).Result()
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("error al registrar idempotencia en Redis: %w", err)
+        }</span>
+
+        <span class="cov10" title="2">if !grabado </span><span class="cov1" title="1">{
+                return fmt.Errorf("la clave %s ya fue procesada concurrentemente por otro hilo", key)
+        }</span>
+
+        <span class="cov1" title="1">return nil</span>
+}
+
+// Ping verifica la conectividad activa con el servidor Redis
+func (r *redisIdempotencyStorage) Ping(ctx context.Context) error <span class="cov0" title="0">{
+        // Si 'client' es tu instancia de go-redis
+        return r.client.Ping(ctx).Err()
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package httpadapter
+
+import (
+        "encoding/json"
+        "net/http"
+        "time"
+
+        "event-notifier/internal/core/domain"
+        "event-notifier/internal/core/ports"
+)
+
+type NotificationHandler struct {
+        publisher ports.EventPublisher
+}
+
+func NewNotificationHandler(publisher ports.EventPublisher) *NotificationHandler <span class="cov10" title="5">{
+        return &amp;NotificationHandler{publisher: publisher}
+}</span>
+
+// NotificationRequest define el JSON que recibirá el cliente (ej. Insomnia)
+type NotificationRequest struct {
+        Destinatario   string                   `json:"destinatario"`
+        Canal          domain.CanalNotificacion `json:"canal"`
+        Mensaje        string                   `json:"mensaje"`
+        IdempotencyKey string                   `json:"idempotency_key"`
+}
+
+func (h *NotificationHandler) HandleSendNotification(w http.ResponseWriter, r *http.Request) <span class="cov10" title="5">{
+        if r.Method != http.MethodPost </span><span class="cov1" title="1">{
+                http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+                return
+        }</span>
+
+        <span class="cov8" title="4">var req NotificationRequest
+        err := json.NewDecoder(r.Body).Decode(&amp;req)
+        if err != nil </span><span class="cov1" title="1">{
+                http.Error(w, "Payload JSON inválido: "+err.Error(), http.StatusBadRequest)
+                return
+        }</span>
+
+        // Validaciones básicas
+        <span class="cov7" title="3">if req.Destinatario == "" || req.Mensaje == "" || req.Canal == "" </span><span class="cov1" title="1">{
+                http.Error(w, "Los campos 'destinatario', 'canal' y 'mensaje' son obligatorios", http.StatusBadRequest)
+                return
+        }</span>
+
+        // Si el cliente no envía una IdempotencyKey, podemos generar una por defecto
+        <span class="cov4" title="2">idempotencyKey := req.IdempotencyKey
+        if idempotencyKey == "" </span><span class="cov1" title="1">{
+                idempotencyKey = generateUUID()
+        }</span>
+
+        // Construir la entidad de dominio usando tu estructura exacta
+        <span class="cov4" title="2">notification := domain.Notificacion{
+                ID:             generateUUID(),
+                IdempotencyKey: idempotencyKey,
+                Canal:          req.Canal,
+                Destinatario:   req.Destinatario,
+                Mensaje:        req.Mensaje,
+                Estado:         domain.EstadoPendiente,
+                Intentos:       0,
+                CreatedAt:      time.Now(),
+                UpdatedAt:      time.Now(),
+        }
+
+        // Publicar el evento al Broker (RabbitMQ)
+        err = h.publisher.Publicar(r.Context(), &amp;notification)
+        if err != nil </span><span class="cov1" title="1">{
+                http.Error(w, "Error al encolar la notificación: "+err.Error(), http.StatusInternalServerError)
+                return
+        }</span>
+
+        // Responder con éxito (202 Accepted - Procesamiento asíncrono)
+        <span class="cov1" title="1">w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusAccepted)
+
+        response := map[string]any{
+                "status":  "success",
+                "message": "Notificación encolada correctamente para procesamiento asíncrono",
+                "data":    notification,
+        }
+
+        json.NewEncoder(w).Encode(response)</span>
+}
+
+func generateUUID() string <span class="cov7" title="3">{
+        return time.Now().Format("20060102150405.000000") + "-event"
+}</span>
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package domain
+
+import (
+        "errors"
+        "time"
+)
+
+// Errores de Dominio
+var (
+        ErrDestinatarioVacio     = errors.New("el destinatario de la notificación no puede estar vacío")
+        ErrMensajeVacio          = errors.New("el mensaje de la notificación no puede estar vacío")
+        ErrCanalInvalido         = errors.New("el canal de notificación especificado no es soportado")
+        ErrMaxReintentosExcedido = errors.New("se ha superado el límite máximo de reintentos de envío")
+)
+
+// CanalNotificacion define las vías de entrega
+type CanalNotificacion string
+
+const (
+        CanalEmail CanalNotificacion = "EMAIL"
+        CanalSMS   CanalNotificacion = "SMS"
+        CanalPush  CanalNotificacion = "PUSH"
+)
+
+// EstadoNotificacion define el ciclo de vida del evento
+type EstadoNotificacion string
+
+const (
+        EstadoPendiente EstadoNotificacion = "PENDIENTE"
+        EstadoEnviado   EstadoNotificacion = "ENVIADO"
+        EstadoFallido   EstadoNotificacion = "FALLIDO"
+)
+
+// Notificacion es la entidad central del sistema
+type Notificacion struct {
+        ID             string             `json:"id"`
+        IdempotencyKey string             `json:"idempotency_key"` // Clave única para evitar duplicados
+        Canal          CanalNotificacion  `json:"canal"`
+        Destinatario   string             `json:"destinatario"`
+        Mensaje        string             `json:"mensaje"`
+        Estado         EstadoNotificacion `json:"estado"`
+        Intentos       int                `json:"intentos"`
+        CreatedAt      time.Time          `json:"created_at"`
+        UpdatedAt      time.Time          `json:"updated_at"`
+}
+
+// Validar verifica que la notificación cumpla con las reglas esenciales de negocio
+func (n *Notificacion) Validar() error <span class="cov10" title="6">{
+        if n.Destinatario == "" </span><span class="cov1" title="1">{
+                return ErrDestinatarioVacio
+        }</span>
+        <span class="cov9" title="5">if n.Mensaje == "" </span><span class="cov1" title="1">{
+                return ErrMensajeVacio
+        }</span>
+        <span class="cov7" title="4">switch n.Canal </span>{
+        case CanalEmail, CanalSMS, CanalPush:<span class="cov6" title="3">
+                return nil</span>
+        default:<span class="cov1" title="1">
+                return ErrCanalInvalido</span>
+        }
+}
+
+func (n *Notificacion) MarcarEnviado() <span class="cov1" title="1">{
+        n.Estado = EstadoEnviado
+        n.UpdatedAt = time.Now()
+}</span>
+
+func (n *Notificacion) RegistrarFallo(maxIntentos int) error <span class="cov4" title="2">{
+        n.Intentos++
+        n.UpdatedAt = time.Now()
+        if n.Intentos &gt;= maxIntentos </span><span class="cov1" title="1">{
+                n.Estado = EstadoFallido
+                return ErrMaxReintentosExcedido
+        }</span>
+        <span class="cov1" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package services
+
+import (
+        "context"
+        "errors"
+        "fmt"
+        "log/slog"
+        "time"
+
+        "event-notifier/internal/adapters/metrics"
+        "event-notifier/internal/core/domain"
+        "event-notifier/internal/core/ports"
+
+        "github.com/prometheus/client_golang/prometheus"
+)
+
+type NotificationDispatcher struct {
+        idempotencyRepo ports.IdempotencyRepository
+        maxRetries      int
+        initialBackoff  time.Duration
+}
+
+func NewNotificationDispatcher(
+        idempotencyRepo ports.IdempotencyRepository,
+        maxRetries int,
+        initialBackoff time.Duration,
+) *NotificationDispatcher <span class="cov8" title="4">{
+        return &amp;NotificationDispatcher{
+                idempotencyRepo: idempotencyRepo,
+                maxRetries:      maxRetries,
+                initialBackoff:  initialBackoff,
+        }
+}</span>
+
+func (d *NotificationDispatcher) DespacharConResiliencia(ctx context.Context, n *domain.Notificacion) error <span class="cov8" title="4">{
+        timer := prometheus.NewTimer(metrics.ProcessingDuration.WithLabelValues(string(n.Canal)))
+        defer timer.ObserveDuration()
+
+        esDuplicado, err := d.idempotencyRepo.EsDuplicado(ctx, n.IdempotencyKey)
+        if err != nil </span><span class="cov0" title="0">{
+                metrics.EventsProcessed.WithLabelValues(string(n.Canal), "error_redis").Inc()
+                return fmt.Errorf("error al verificar idempotencia: %w", err)
+        }</span>
+
+        <span class="cov8" title="4">if esDuplicado </span><span class="cov1" title="1">{
+                slog.Info("Mensaje descartado por clave de idempotencia duplicada",
+                        slog.String("id", n.ID),
+                        slog.String("idempotency_key", n.IdempotencyKey),
+                )
+                metrics.EventsProcessed.WithLabelValues(string(n.Canal), "duplicate").Inc()
+                return nil
+        }</span>
+
+        <span class="cov7" title="3">backoff := d.initialBackoff
+
+        for intento := 1; intento &lt;= d.maxRetries; intento++ </span><span class="cov10" title="5">{
+                if ctx.Err() != nil </span><span class="cov1" title="1">{
+                        metrics.EventsProcessed.WithLabelValues(string(n.Canal), "context_canceled").Inc()
+                        return ctx.Err()
+                }</span>
+
+                <span class="cov8" title="4">slog.Info("Procesando envío de notificación",
+                        slog.String("id", n.ID),
+                        slog.Int("intento", intento),
+                        slog.Int("max_retries", d.maxRetries),
+                )
+
+                errEnvio := d.simularEnvio(n)
+                if errEnvio == nil </span><span class="cov1" title="1">{
+                        n.MarcarEnviado()
+                        _ = d.idempotencyRepo.MarcarProcesado(ctx, n.IdempotencyKey, 24*time.Hour)
+
+                        slog.Info("Envío completado con éxito",
+                                slog.String("id", n.ID),
+                                slog.String("destinatario", n.Destinatario),
+                        )
+                        metrics.EventsProcessed.WithLabelValues(string(n.Canal), "success").Inc()
+                        return nil
+                }</span>
+
+                <span class="cov7" title="3">_ = n.RegistrarFallo(d.maxRetries)
+                slog.Warn("Fallo en intento de envío",
+                        slog.Int("intento", intento),
+                        slog.String("id", n.ID),
+                        slog.String("error", errEnvio.Error()),
+                        slog.Duration("espera", backoff),
+                )
+
+                select </span>{
+                case &lt;-ctx.Done():<span class="cov0" title="0">
+                        metrics.EventsProcessed.WithLabelValues(string(n.Canal), "context_canceled_wait").Inc()
+                        return ctx.Err()</span>
+                case &lt;-time.After(backoff):<span class="cov7" title="3"></span>
+                }
+
+                <span class="cov7" title="3">backoff *= 2</span>
+        }
+
+        <span class="cov1" title="1">metrics.EventsProcessed.WithLabelValues(string(n.Canal), "dlq_failed").Inc()
+        return fmt.Errorf("se agotaron los %d reintentos para la notificación %s: %w", d.maxRetries, n.ID, domain.ErrMaxReintentosExcedido)</span>
+}
+
+func (d *NotificationDispatcher) simularEnvio(n *domain.Notificacion) error <span class="cov8" title="4">{
+        if n.Destinatario == "servidor.caido@error.com" </span><span class="cov7" title="3">{
+                return errors.New("error 503: proveedor de mensajería no responde")
+        }</span>
+        <span class="cov1" title="1">time.Sleep(200 * time.Millisecond)
+        return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package services
+
+import (
+        "log/slog"
+        "sync"
+        "time"
+
+        "event-notifier/internal/adapters/metrics"
+        "event-notifier/internal/core/domain"
+)
+
+type Pool struct {
+        numWorkers int
+        tareas     chan *domain.Notificacion
+        wg         sync.WaitGroup
+}
+
+func NewPool(numWorkers int, bufferSize int) *Pool <span class="cov4" title="2">{
+        return &amp;Pool{
+                numWorkers: numWorkers,
+                tareas:     make(chan *domain.Notificacion, bufferSize),
+        }
+}</span>
+
+func (p *Pool) Iniciar() <span class="cov4" title="2">{
+        for w := 1; w &lt;= p.numWorkers; w++ </span><span class="cov9" title="5">{
+                p.wg.Add(1)
+
+                go func(workerID int) </span><span class="cov9" title="5">{
+                        defer p.wg.Done()
+                        metrics.ActiveWorkers.Inc()
+                        defer metrics.ActiveWorkers.Dec()
+
+                        for notificacion := range p.tareas </span><span class="cov10" title="6">{
+                                slog.Info("Procesando notificación",
+                                        slog.Int("worker_id", workerID),
+                                        slog.String("id", notificacion.ID),
+                                        slog.String("destinatario", notificacion.Destinatario),
+                                        slog.String("canal", string(notificacion.Canal)),
+                                )
+
+                                time.Sleep(300 * time.Millisecond)
+
+                                slog.Info("Notificación enviada con éxito",
+                                        slog.Int("worker_id", workerID),
+                                        slog.String("id", notificacion.ID),
+                                )
+                        }</span>
+                }(w)
+        }
+}
+
+func (p *Pool) Encolar(n *domain.Notificacion) <span class="cov10" title="6">{
+        p.tareas &lt;- n
+}</span>
+func (p *Pool) Detener() <span class="cov4" title="2">{
+        close(p.tareas)
+        p.wg.Wait()
+}</span>
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package middleware
+
+import (
+        "context"
+        "log/slog"
+        "net/http"
+
+        "github.com/google/uuid"
+)
+
+type contextKey string
+
+const RequestIDKey contextKey = "request_id"
+
+// RequestIDMiddleware intercepta peticiones HTTP, inyecta/genera un Request ID y configura slog
+func RequestIDMiddleware(next http.Handler) http.Handler <span class="cov1" title="1">{
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) </span><span class="cov10" title="2">{
+                reqID := r.Header.Get("X-Request-ID")
+                if reqID == "" </span><span class="cov1" title="1">{
+                        reqID = uuid.New().String()
+                }</span>
+
+                // Devolver el ID en la respuesta HTTP para debugging del cliente
+                <span class="cov10" title="2">w.Header().Set("X-Request-ID", reqID)
+
+                // Crear contexto con el ID
+                ctx := context.WithValue(r.Context(), RequestIDKey, reqID)
+
+                // Crear un logger hijo con el request_id predeterminado
+                logger := slog.With("request_id", reqID)
+                ctx = context.WithValue(ctx, "logger", logger)
+
+                next.ServeHTTP(w, r.WithContext(ctx))</span>
+        })
+}
+
+// GetRequestID extrae el ID del contexto de forma segura
+func GetRequestID(ctx context.Context) string <span class="cov0" title="0">{
+        if id, ok := ctx.Value(RequestIDKey).(string); ok </span><span class="cov0" title="0">{
+                return id
+        }</span>
+        <span class="cov0" title="0">return "unknown"</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

@@ -152,6 +152,10 @@ func NewRabbitMQAdapter(url string, exchange string, queueName string, routingKe
 }
 
 func (r *RabbitMQAdapter) Publicar(ctx context.Context, n *domain.Notificacion) error {
+	if r.ch == nil || r.ch.IsClosed() {
+		return fmt.Errorf("el canal de RabbitMQ no está inicializado o está cerrado")
+	}
+
 	cuerpoJSON, err := json.Marshal(n)
 	if err != nil {
 		return fmt.Errorf("error al serializar notificación: %w", err)
@@ -245,10 +249,20 @@ func (r *RabbitMQAdapter) IniciarConsumo(ctx context.Context, handler func(ctx c
 }
 
 func (r *RabbitMQAdapter) Cerrar() error {
-	if err := r.ch.Close(); err != nil {
-		return err
+	if r == nil {
+		return nil
 	}
-	return r.conn.Close()
+	var errCh, errConn error
+	if r.ch != nil && !r.ch.IsClosed() {
+		errCh = r.ch.Close()
+	}
+	if r.conn != nil && !r.conn.IsClosed() {
+		errConn = r.conn.Close()
+	}
+	if errCh != nil {
+		return errCh
+	}
+	return errConn
 }
 
 // Ping verifica que la conexión y el canal con RabbitMQ estén activos y operativos
@@ -268,6 +282,9 @@ func (r *RabbitMQAdapter) Ping(ctx context.Context) error {
 
 // PublishNotificacion publica un evento hacia RabbitMQ propagando el Correlation ID
 func (r *RabbitMQAdapter) PublishNotificacion(ctx context.Context, notif *domain.Notificacion) error {
+	if r.ch == nil || r.ch.IsClosed() {
+		return fmt.Errorf("el canal de RabbitMQ no está inicializado o está cerrado")
+	}
 	body, err := json.Marshal(notif)
 	if err != nil {
 		return fmt.Errorf("error serializando notificación: %w", err)

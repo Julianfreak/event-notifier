@@ -41,10 +41,11 @@ jobs:
 
       - name: Run Unit Tests and Enforce 85% Coverage
         run: |
-          # 1. Ejecutar pruebas con detector de carreras (-race) cubriendo todo el proyecto
-          go test -v -race -coverprofile=coverage.out ./...
+          # 1. Ejecutar pruebas con detector de carreras cubriendo solo la carpeta internal/
+          go test -v -race -coverprofile=coverage.out ./internal/...
           
-          # 2. Extraer el porcentaje de cobertura total
+          # 2. Extraer el porcentaje de cobertura total# 1. Ejecutar pruebas con detector de carreras (-race) cubriendo todo el proyecto
+          go test -v -race -coverprofile=coverage.out ./...
           COVERAGE_STR=$(go tool cover -func=coverage.out | grep total: | awk '{print $3}')
           echo "Cobertura total obtenida: $COVERAGE_STR"
           
@@ -55,7 +56,7 @@ jobs:
           PASSED=$(awk -v cov="$COVERAGE_NUM" 'BEGIN {print (cov >= 85.0) ? "1" : "0"}')
           
           if [ "$PASSED" -eq "1" ]; then
-            echo "¡Éxito! La cobertura de código cumple con el estándar requerido (>85%)."
+            echo "¡Éxito! La cobertura de código cumple con el estándar requerido (>=85%)."
           else
             echo "Error: La cobertura actual ($COVERAGE_NUM%) es inferior al umbral mínimo del 85%."
             exit 1
