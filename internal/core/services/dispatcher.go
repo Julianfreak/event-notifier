@@ -12,12 +12,18 @@ import (
 	"event-notifier/internal/core/ports"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sony/gobreaker/v2"
+)
+
+var (
+	ErrCircuitOpen = errors.New("circuit breaker abierto: proveedor de mensajería no disponible temporalmente")
 )
 
 type NotificationDispatcher struct {
 	idempotencyRepo ports.IdempotencyRepository
 	maxRetries      int
 	initialBackoff  time.Duration
+	circuitBreaker  *gobreaker.CircuitBreaker[any]
 }
 
 func NewNotificationDispatcher(
@@ -25,10 +31,26 @@ func NewNotificationDispatcher(
 	maxRetries int,
 	initialBackoff time.Duration,
 ) *NotificationDispatcher {
+	st := gobreaker.Settings{
+		Name:        "NotificationProvider",
+		MaxRequests: 3,                // Número de peticiones permitidas en estado half-open
+		Interval:    10 * time.Second, // Ventana de tiempo para limpiar conteo de fallos en estado closed
+		Timeout:     30 * time.Second, // Tiempo que permanece abierto antes de pasar a half-open
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			// Si la tasa de fallos supera el 60% con al menos 5 peticiones, se abre el circuito
+			failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
+			return counts.Requests >= 5 && failureRatio >= 0.6
+		},
+		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
+			// Aquí puedes registrar logs o emitir métricas de cambio de estado
+			fmt.Printf("[CircuitBreaker] %s cambió de estado: %s -> %s\n", name, from, to)
+		},
+	}
 	return &NotificationDispatcher{
 		idempotencyRepo: idempotencyRepo,
 		maxRetries:      maxRetries,
 		initialBackoff:  initialBackoff,
+		circuitBreaker:  gobreaker.NewCircuitBreaker[any](st),
 	}
 }
 
@@ -105,5 +127,29 @@ func (d *NotificationDispatcher) simularEnvio(n *domain.Notificacion) error {
 		return errors.New("error 503: proveedor de mensajería no responde")
 	}
 	time.Sleep(200 * time.Millisecond)
+	return nil
+}
+func (d *NotificationDispatcher) enviarConCircuitBreaker(ctx context.Context, notif *domain.Notificacion) error {
+	_, err := d.circuitBreaker.Execute(func() (any, error) {
+		// Llamada real al proveedor externo de mensajería (API HTTP, SDK, etc.)
+		err := d.simularEnvioProveedor(ctx, notif)
+		if err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+
+	if err != nil {
+		if errors.Is(err, gobreaker.ErrOpenState) {
+			return ErrCircuitOpen
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (d *NotificationDispatcher) simularEnvioProveedor(ctx context.Context, notif *domain.Notificacion) error {
+	// Lógica de integración con el proveedor externo
 	return nil
 }

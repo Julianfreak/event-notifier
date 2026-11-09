@@ -161,6 +161,10 @@ docker run --rm \
   --network host \
   grafana/k6:2.3.0 run load-test.js
 ```
+### 🛡️ Resiliencia y Patrón Circuit Breaker
+El servicio de despacho implementa el patrón **Circuit Breaker** (utilizando `gobreaker`) para proteger la infraestructura frente a caídas prolongadas o intermitencias de los proveedores externos de mensajería (SMS, Email, Push). 
+- **Umbral de apertura:** Se abre automáticamente si la tasa de fallos supera el 60% en una ventana mínima de 5 peticiones.
+- **Estado Semi-Abierto (Half-Open):** Permite solicitudes de prueba controladas tras un timeout de enfriamiento para verificar si el proveedor se ha recuperado.
 
 
 ### ⚙️ Arquitectura limpia sin archivos locales

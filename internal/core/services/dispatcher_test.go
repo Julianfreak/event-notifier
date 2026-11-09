@@ -8,6 +8,8 @@ import (
 
 	"event-notifier/internal/core/domain"
 	"event-notifier/internal/core/services"
+
+	"github.com/sony/gobreaker/v2"
 )
 
 // ==========================================================
@@ -174,4 +176,32 @@ func TestDespacharConResiliencia(t *testing.T) {
 			t.Errorf("Se esperaba error 'context.Canceled', obtenido: '%v'", err)
 		}
 	})
+}
+func TestNotificationDispatcher_CircuitBreaker(t *testing.T) {
+	st := gobreaker.Settings{
+		Name:        "TestProvider",
+		MaxRequests: 1,
+		Interval:    time.Second,
+		Timeout:     100 * time.Millisecond,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return counts.TotalFailures >= 2
+		},
+	}
+	cb := gobreaker.NewCircuitBreaker[any](st)
+
+	// Forzar fallos para abrir el circuito
+	for i := 0; i < 2; i++ {
+		_, _ = cb.Execute(func() (any, error) {
+			return nil, errors.New("fallo del proveedor")
+		})
+	}
+
+	// La siguiente llamada debe retornar ErrOpenState porque el circuito está abierto
+	_, err := cb.Execute(func() (any, error) {
+		return "ok", nil
+	})
+
+	if !errors.Is(err, gobreaker.ErrOpenState) {
+		t.Errorf("Se esperaba que el circuito estuviera abierto (ErrOpenState), se obtuvo: %v", err)
+	}
 }
