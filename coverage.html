@@ -55,19 +55,19 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">event-notifier/internal/adapters/broker/rabbitmq_adapter.go (3.9%)</option>
+				<option value="file0">event-notifier/internal/adapters/broker/rabbitmq_adapter.go (13.4%)</option>
 				
-				<option value="file1">event-notifier/internal/adapters/cache/redis_idempotency.go (78.9%)</option>
+				<option value="file1">event-notifier/internal/adapters/cache/redis_idempotency.go (84.2%)</option>
 				
 				<option value="file2">event-notifier/internal/adapters/http/handler.go (100.0%)</option>
 				
 				<option value="file3">event-notifier/internal/core/domain/notification.go (100.0%)</option>
 				
-				<option value="file4">event-notifier/internal/core/services/dispatcher.go (88.9%)</option>
+				<option value="file4">event-notifier/internal/core/services/dispatcher.go (64.7%)</option>
 				
 				<option value="file5">event-notifier/internal/core/services/worker_pool.go (100.0%)</option>
 				
-				<option value="file6">event-notifier/internal/middleware/request_id.go (75.0%)</option>
+				<option value="file6">event-notifier/internal/middleware/request_id.go (100.0%)</option>
 				
 				</select>
 			</div>
@@ -114,10 +114,10 @@ type RabbitMQAdapter struct {
         routingKey string
 }
 
-func NewRabbitMQAdapter(url string, exchange string, queueName string, routingKey string) (*RabbitMQAdapter, error) <span class="cov0" title="0">{
+func NewRabbitMQAdapter(url string, exchange string, queueName string, routingKey string) (*RabbitMQAdapter, error) <span class="cov1" title="1">{
         // 1. Abrimos conexión TCP física
         conn, err := amqp.Dial(url)
-        if err != nil </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov1" title="1">{
                 return nil, fmt.Errorf("fallo al conectar con RabbitMQ en %s: %w", url, err)
         }</span>
 
@@ -243,8 +243,12 @@ func NewRabbitMQAdapter(url string, exchange string, queueName string, routingKe
         }, nil</span>
 }
 
-func (r *RabbitMQAdapter) Publicar(ctx context.Context, n *domain.Notificacion) error <span class="cov0" title="0">{
-        cuerpoJSON, err := json.Marshal(n)
+func (r *RabbitMQAdapter) Publicar(ctx context.Context, n *domain.Notificacion) error <span class="cov1" title="1">{
+        if r.ch == nil || r.ch.IsClosed() </span><span class="cov1" title="1">{
+                return fmt.Errorf("el canal de RabbitMQ no está inicializado o está cerrado")
+        }</span>
+
+        <span class="cov0" title="0">cuerpoJSON, err := json.Marshal(n)
         if err != nil </span><span class="cov0" title="0">{
                 return fmt.Errorf("error al serializar notificación: %w", err)
         }</span>
@@ -336,17 +340,27 @@ func (r *RabbitMQAdapter) IniciarConsumo(ctx context.Context, handler func(ctx c
         }
 }
 
-func (r *RabbitMQAdapter) Cerrar() error <span class="cov0" title="0">{
-        if err := r.ch.Close(); err != nil </span><span class="cov0" title="0">{
-                return err
+func (r *RabbitMQAdapter) Cerrar() error <span class="cov1" title="1">{
+        if r == nil </span><span class="cov0" title="0">{
+                return nil
         }</span>
-        <span class="cov0" title="0">return r.conn.Close()</span>
+        <span class="cov1" title="1">var errCh, errConn error
+        if r.ch != nil &amp;&amp; !r.ch.IsClosed() </span><span class="cov0" title="0">{
+                errCh = r.ch.Close()
+        }</span>
+        <span class="cov1" title="1">if r.conn != nil &amp;&amp; !r.conn.IsClosed() </span><span class="cov0" title="0">{
+                errConn = r.conn.Close()
+        }</span>
+        <span class="cov1" title="1">if errCh != nil </span><span class="cov0" title="0">{
+                return errCh
+        }</span>
+        <span class="cov1" title="1">return errConn</span>
 }
 
 // Ping verifica que la conexión y el canal con RabbitMQ estén activos y operativos
-func (r *RabbitMQAdapter) Ping(ctx context.Context) error <span class="cov8" title="1">{
+func (r *RabbitMQAdapter) Ping(ctx context.Context) error <span class="cov1" title="1">{
         // 1. Validar si la conexión TCP física está cerrada
-        if r.conn == nil || r.conn.IsClosed() </span><span class="cov8" title="1">{
+        if r.conn == nil || r.conn.IsClosed() </span><span class="cov1" title="1">{
                 return fmt.Errorf("la conexión con RabbitMQ está cerrada o es nula")
         }</span>
 
@@ -359,8 +373,8 @@ func (r *RabbitMQAdapter) Ping(ctx context.Context) error <span class="cov8" tit
 }
 
 // PublishNotificacion publica un evento hacia RabbitMQ propagando el Correlation ID
-func (r *RabbitMQAdapter) PublishNotificacion(ctx context.Context, notif *domain.Notificacion) error <span class="cov8" title="1">{
-        if r.ch == nil || r.ch.IsClosed() </span><span class="cov8" title="1">{
+func (r *RabbitMQAdapter) PublishNotificacion(ctx context.Context, notif *domain.Notificacion) error <span class="cov10" title="2">{
+        if r.ch == nil || r.ch.IsClosed() </span><span class="cov10" title="2">{
                 return fmt.Errorf("el canal de RabbitMQ no está inicializado o está cerrado")
         }</span>
         <span class="cov0" title="0">body, err := json.Marshal(notif)
@@ -420,7 +434,7 @@ type redisIdempotencyStorage struct {
 }
 
 // NewRedisIdempotencyStorage es el constructor que inicializa la conexión con Redis
-func NewRedisIdempotencyStorage(addr string, password string, db int) (ports.IdempotencyRepository, error) <span class="cov1" title="1">{
+func NewRedisIdempotencyStorage(addr string, password string, db int) (ports.IdempotencyRepository, error) <span class="cov10" title="2">{
         rdb := redis.NewClient(&amp;redis.Options{
                 Addr:     addr,
                 Password: password,
@@ -435,7 +449,7 @@ func NewRedisIdempotencyStorage(addr string, password string, db int) (ports.Ide
                 return nil, fmt.Errorf("fallo de conexión con Redis en %s: %w", addr, err)
         }</span>
 
-        <span class="cov1" title="1">return &amp;redisIdempotencyStorage{
+        <span class="cov10" title="2">return &amp;redisIdempotencyStorage{
                 client: rdb,
         }, nil</span>
 }
@@ -473,7 +487,7 @@ func (r *redisIdempotencyStorage) MarcarProcesado(ctx context.Context, key strin
 }
 
 // Ping verifica la conectividad activa con el servidor Redis
-func (r *redisIdempotencyStorage) Ping(ctx context.Context) error <span class="cov0" title="0">{
+func (r *redisIdempotencyStorage) Ping(ctx context.Context) error <span class="cov1" title="1">{
         // Si 'client' es tu instancia de go-redis
         return r.client.Ping(ctx).Err()
 }</span>
@@ -661,12 +675,18 @@ import (
         "event-notifier/internal/core/ports"
 
         "github.com/prometheus/client_golang/prometheus"
+        "github.com/sony/gobreaker/v2"
+)
+
+var (
+        ErrCircuitOpen = errors.New("circuit breaker abierto: proveedor de mensajería no disponible temporalmente")
 )
 
 type NotificationDispatcher struct {
         idempotencyRepo ports.IdempotencyRepository
         maxRetries      int
         initialBackoff  time.Duration
+        circuitBreaker  *gobreaker.CircuitBreaker[any]
 }
 
 func NewNotificationDispatcher(
@@ -674,12 +694,28 @@ func NewNotificationDispatcher(
         maxRetries int,
         initialBackoff time.Duration,
 ) *NotificationDispatcher <span class="cov8" title="4">{
-        return &amp;NotificationDispatcher{
+        st := gobreaker.Settings{
+                Name:        "NotificationProvider",
+                MaxRequests: 3,                // Número de peticiones permitidas en estado half-open
+                Interval:    10 * time.Second, // Ventana de tiempo para limpiar conteo de fallos en estado closed
+                Timeout:     30 * time.Second, // Tiempo que permanece abierto antes de pasar a half-open
+                ReadyToTrip: func(counts gobreaker.Counts) bool </span><span class="cov0" title="0">{
+                        // Si la tasa de fallos supera el 60% con al menos 5 peticiones, se abre el circuito
+                        failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
+                        return counts.Requests &gt;= 5 &amp;&amp; failureRatio &gt;= 0.6
+                }</span>,
+                OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) <span class="cov0" title="0">{
+                        // Aquí puedes registrar logs o emitir métricas de cambio de estado
+                        fmt.Printf("[CircuitBreaker] %s cambió de estado: %s -&gt; %s\n", name, from, to)
+                }</span>,
+        }
+        <span class="cov8" title="4">return &amp;NotificationDispatcher{
                 idempotencyRepo: idempotencyRepo,
                 maxRetries:      maxRetries,
                 initialBackoff:  initialBackoff,
-        }
-}</span>
+                circuitBreaker:  gobreaker.NewCircuitBreaker[any](st),
+        }</span>
+}
 
 func (d *NotificationDispatcher) DespacharConResiliencia(ctx context.Context, n *domain.Notificacion) error <span class="cov8" title="4">{
         timer := prometheus.NewTimer(metrics.ProcessingDuration.WithLabelValues(string(n.Canal)))
@@ -756,6 +792,30 @@ func (d *NotificationDispatcher) simularEnvio(n *domain.Notificacion) error <spa
         <span class="cov1" title="1">time.Sleep(200 * time.Millisecond)
         return nil</span>
 }
+func (d *NotificationDispatcher) enviarConCircuitBreaker(ctx context.Context, notif *domain.Notificacion) error <span class="cov0" title="0">{
+        _, err := d.circuitBreaker.Execute(func() (any, error) </span><span class="cov0" title="0">{
+                // Llamada real al proveedor externo de mensajería (API HTTP, SDK, etc.)
+                err := d.simularEnvioProveedor(ctx, notif)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov0" title="0">return nil, nil</span>
+        })
+
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, gobreaker.ErrOpenState) </span><span class="cov0" title="0">{
+                        return ErrCircuitOpen
+                }</span>
+                <span class="cov0" title="0">return err</span>
+        }
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (d *NotificationDispatcher) simularEnvioProveedor(ctx context.Context, notif *domain.Notificacion) error <span class="cov0" title="0">{
+        // Lógica de integración con el proveedor externo
+        return nil
+}</span>
 </pre>
 		
 		<pre class="file" id="file5" style="display: none">package services
@@ -856,11 +916,11 @@ func RequestIDMiddleware(next http.Handler) http.Handler <span class="cov1" titl
 }
 
 // GetRequestID extrae el ID del contexto de forma segura
-func GetRequestID(ctx context.Context) string <span class="cov0" title="0">{
-        if id, ok := ctx.Value(RequestIDKey).(string); ok </span><span class="cov0" title="0">{
+func GetRequestID(ctx context.Context) string <span class="cov10" title="2">{
+        if id, ok := ctx.Value(RequestIDKey).(string); ok </span><span class="cov1" title="1">{
                 return id
         }</span>
-        <span class="cov0" title="0">return "unknown"</span>
+        <span class="cov1" title="1">return "unknown"</span>
 }
 </pre>
 		

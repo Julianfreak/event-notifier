@@ -33,6 +33,7 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 - **Testing Automatizado:** Pruebas unitarias mediante Mocks e interfaces implícitas (testing nativo) evaluando idempotencia, fallas de red, agotamiento de reintentos y cancelaciones de contexto con alta cobertura (>85%).
 - **Contenedorización Completa:** Orquestación total mediante Docker Compose (Worker, Redis, RabbitMQ, Prometheus, Loki, Alloy y Grafana).
 - **CI/CD Automatizado:** Pipeline en GitHub Actions para ejecución continua de pruebas unitarias (>85% estricto) y construcción/publicación automatizada de imágenes Docker multi-stage.
+- **Circuit Breaker (`gobreaker/v2`):** Integrado en el despachador de notificaciones (`NotificationDispatcher`) para proteger contra fallos en cascada de los proveedores de mensajería. Configurado con una ventana deslizante de fallos (`ReadyToTrip` cuando la tasa supera el 60% en al menos 5 peticiones) y un mecanismo de recuperación automática (*Timeout* y estado *Half-Open*).
 
 ---
 

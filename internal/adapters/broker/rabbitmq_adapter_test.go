@@ -103,3 +103,46 @@ func TestRabbitMQAdapter_Cerrar_Safe(t *testing.T) {
 		t.Errorf("No se esperaba error al cerrar un adaptador nulo/vacío, se obtuvo: %v", err)
 	}
 }
+func TestRabbitMQAdapter_CasosDefensivos(t *testing.T) {
+	// Adaptador con canales nulos para forzar errores de validación interna sin levantar broker
+	adapter := &RabbitMQAdapter{
+		conn: nil,
+		ch:   nil,
+	}
+
+	ctx := context.Background()
+	notif := &domain.Notificacion{
+		ID:           "test-rb-1",
+		Destinatario: "test@empresa.com",
+		Mensaje:      "Prueba RabbitMQ",
+		Canal:        domain.CanalEmail,
+	}
+
+	t.Run("Publicar debe retornar error si el canal es nulo", func(t *testing.T) {
+		err := adapter.Publicar(ctx, notif)
+		if err == nil {
+			t.Error("Se esperaba un error al publicar con canal nulo")
+		}
+	})
+
+	t.Run("PublishNotificacion debe retornar error si el canal es nulo", func(t *testing.T) {
+		err := adapter.PublishNotificacion(ctx, notif)
+		if err == nil {
+			t.Error("Se esperaba un error al publicar notificación con canal nulo")
+		}
+	})
+
+	t.Run("Ping debe retornar error si la conexión es nula", func(t *testing.T) {
+		err := adapter.Ping(ctx)
+		if err == nil {
+			t.Error("Se esperaba un error en Ping con conexión nula")
+		}
+	})
+
+	t.Run("Cerrar no debe fallar si ya está cerrado", func(t *testing.T) {
+		err := adapter.Cerrar()
+		if err != nil {
+			t.Errorf("No se esperaba error al cerrar adaptador vacío: %v", err)
+		}
+	})
+}

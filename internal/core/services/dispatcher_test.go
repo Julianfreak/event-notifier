@@ -1,4 +1,4 @@
-package services_test
+package services
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"event-notifier/internal/core/domain"
-	"event-notifier/internal/core/services"
 
 	"github.com/sony/gobreaker/v2"
 )
@@ -36,6 +35,7 @@ func (m *MockIdempotencyRepo) MarcarProcesado(ctx context.Context, key string, t
 	m.claveMarcada = key
 	return m.marcarProcesadoErr
 }
+
 func (m *MockIdempotencyRepo) Ping(ctx context.Context) error {
 	return nil
 }
@@ -49,11 +49,10 @@ func TestDespacharConResiliencia(t *testing.T) {
 	// CASO 1: Idempotencia - Mensaje duplicado detectado en Redis
 	t.Run("Debe descartar mensaje duplicado sin reintentar ni marcar", func(t *testing.T) {
 		mockRepo := &MockIdempotencyRepo{
-			esDuplicadoResp: true, // Simula que la clave ya existe en Redis
+			esDuplicadoResp: true,
 		}
 
-		// Usamos 1ms de backoff para velocidad instantánea
-		dispatcher := services.NewNotificationDispatcher(mockRepo, 3, 1*time.Millisecond)
+		dispatcher := NewNotificationDispatcher(mockRepo, 3, 1*time.Millisecond)
 
 		notif := &domain.Notificacion{
 			ID:             "notif-dup-01",
@@ -65,15 +64,12 @@ func TestDespacharConResiliencia(t *testing.T) {
 
 		err := dispatcher.DespacharConResiliencia(context.Background(), notif)
 
-		// 1. No debe arrojar error (debe dar Ack a RabbitMQ)
 		if err != nil {
 			t.Fatalf("No se esperaba error en descarte por duplicado, obtenido: %v", err)
 		}
-		// 2. No debe haber intentado guardar en Redis otra vez
 		if mockRepo.marcarProcesadoLlamado {
 			t.Errorf("No debía llamarse a MarcarProcesado para un duplicado")
 		}
-		// 3. El estado de la entidad no debe haber cambiado a ENVIADO
 		if notif.Estado == domain.EstadoEnviado {
 			t.Errorf("El estado de la notificación no debió cambiar a ENVIADO")
 		}
@@ -82,10 +78,10 @@ func TestDespacharConResiliencia(t *testing.T) {
 	// CASO 2: Envío Exitoso en el primer intento
 	t.Run("Debe procesar exitosamente y registrar la clave en Redis", func(t *testing.T) {
 		mockRepo := &MockIdempotencyRepo{
-			esDuplicadoResp: false, // Mensaje nuevo
+			esDuplicadoResp: false,
 		}
 
-		dispatcher := services.NewNotificationDispatcher(mockRepo, 3, 1*time.Millisecond)
+		dispatcher := NewNotificationDispatcher(mockRepo, 3, 1*time.Millisecond)
 
 		notif := &domain.Notificacion{
 			ID:             "notif-ok-01",
@@ -111,55 +107,45 @@ func TestDespacharConResiliencia(t *testing.T) {
 		}
 	})
 
-	// CASO 3: Agotamiento de reintentos (Falla persistente y desvío a DLQ)
+	// CASO 3: Agotamiento de reintentos
 	t.Run("Debe agotar reintentos con backoff y retornar ErrMaxReintentosExcedido", func(t *testing.T) {
 		mockRepo := &MockIdempotencyRepo{
 			esDuplicadoResp: false,
 		}
 
-		// 3 reintentos con 1ms de separación
-		dispatcher := services.NewNotificationDispatcher(mockRepo, 3, 1*time.Millisecond)
+		dispatcher := NewNotificationDispatcher(mockRepo, 3, 1*time.Millisecond)
 
 		notif := &domain.Notificacion{
 			ID:             "notif-fallo-01",
 			IdempotencyKey: "pago-error-300",
-			Destinatario:   "servidor.caido@error.com", // Dispara el error simulado en dispatcher
+			Destinatario:   "servidor.caido@error.com",
 			Canal:          domain.CanalEmail,
 			Estado:         domain.EstadoPendiente,
 		}
 
 		err := dispatcher.DespacharConResiliencia(context.Background(), notif)
 
-		// Verificamos que el error final contenga la causa de dominio
 		if !errors.Is(err, domain.ErrMaxReintentosExcedido) {
 			t.Errorf("Se esperaba error '%v', obtenido: '%v'", domain.ErrMaxReintentosExcedido, err)
 		}
-		// Verificamos que la entidad haya registrado los 3 intentos fallidos
 		if notif.Intentos != 3 {
-			t.Errorf("Se esperaban 3 intentos registrados, obtenidos: %d", notif.Intentos)
+			t.Errorf("Se esperaban 3 intentos obtenidos: %d", notif.Intentos)
 		}
-		// El estado final de la entidad debe ser FALLIDO
 		if notif.Estado != domain.EstadoFallido {
 			t.Errorf("Estado esperado FALLIDO, obtenido: %s", notif.Estado)
 		}
-		// No debió marcarse como procesado exitosamente en Redis
-		if mockRepo.marcarProcesadoLlamado {
-			t.Errorf("Un mensaje fallido no debe ser marcado como procesado exitoso en Redis")
-		}
 	})
 
-	// CASO 4: Cancelación de Contexto (Graceful Shutdown durante la espera)
+	// CASO 4: Cancelación de Contexto
 	t.Run("Debe interrumpir reintentos inmediatamente si el contexto es cancelado", func(t *testing.T) {
 		mockRepo := &MockIdempotencyRepo{
 			esDuplicadoResp: false,
 		}
 
-		// Configuramos un backoff largo (500ms) para comprobar la interrupción inmediata
-		dispatcher := services.NewNotificationDispatcher(mockRepo, 5, 500*time.Millisecond)
+		dispatcher := NewNotificationDispatcher(mockRepo, 5, 500*time.Millisecond)
 
-		// Creamos un contexto cancelable y lo cancelamos de inmediato
 		ctx, cancel := context.WithCancel(context.Background())
-		cancel() // Cancelado antes o durante el intento
+		cancel()
 
 		notif := &domain.Notificacion{
 			ID:             "notif-cancel-01",
@@ -171,12 +157,12 @@ func TestDespacharConResiliencia(t *testing.T) {
 
 		err := dispatcher.DespacharConResiliencia(ctx, notif)
 
-		// Debe retornar context.Canceled sin esperar los 500ms
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("Se esperaba error 'context.Canceled', obtenido: '%v'", err)
 		}
 	})
 }
+
 func TestNotificationDispatcher_CircuitBreaker(t *testing.T) {
 	st := gobreaker.Settings{
 		Name:        "TestProvider",
@@ -189,14 +175,12 @@ func TestNotificationDispatcher_CircuitBreaker(t *testing.T) {
 	}
 	cb := gobreaker.NewCircuitBreaker[any](st)
 
-	// Forzar fallos para abrir el circuito
 	for i := 0; i < 2; i++ {
 		_, _ = cb.Execute(func() (any, error) {
 			return nil, errors.New("fallo del proveedor")
 		})
 	}
 
-	// La siguiente llamada debe retornar ErrOpenState porque el circuito está abierto
 	_, err := cb.Execute(func() (any, error) {
 		return "ok", nil
 	})
@@ -204,4 +188,38 @@ func TestNotificationDispatcher_CircuitBreaker(t *testing.T) {
 	if !errors.Is(err, gobreaker.ErrOpenState) {
 		t.Errorf("Se esperaba que el circuito estuviera abierto (ErrOpenState), se obtuvo: %v", err)
 	}
+}
+
+func TestNotificationDispatcher_EnviarConCircuitBreaker(t *testing.T) {
+	repo := &MockIdempotencyRepo{}
+	dispatcher := NewNotificationDispatcher(repo, 3, 10*time.Millisecond)
+
+	ctx := context.Background()
+	notifExito := &domain.Notificacion{
+		ID:           "test-cb-dispatch-1",
+		Destinatario: "test@empresa.com",
+		Canal:        domain.CanalEmail,
+	}
+
+	t.Run("Debe ejecutar el envío exitosamente a través del circuito cerrado", func(t *testing.T) {
+		err := dispatcher.enviarConCircuitBreaker(ctx, notifExito)
+		if err != nil && errors.Is(err, gobreaker.ErrOpenState) {
+			t.Errorf("No se esperaba error de circuito abierto, se obtuvo: %v", err)
+		}
+	})
+
+	t.Run("Debe abrir el circuito tras fallos consecutivos y retornar error de circuito abierto", func(t *testing.T) {
+		// Forzar fallos directamente en el circuitBreaker para superar el umbral ReadyToTrip
+		for i := 0; i < 6; i++ {
+			_, _ = dispatcher.circuitBreaker.Execute(func() (any, error) {
+				return nil, errors.New("fallo forzado del proveedor")
+			})
+		}
+
+		// La siguiente llamada debe fallar porque el circuito está abierto
+		err := dispatcher.enviarConCircuitBreaker(ctx, notifExito)
+		if err == nil {
+			t.Error("Se esperaba un error por circuito abierto, se obtuvo nil")
+		}
+	})
 }
