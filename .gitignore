@@ -14,3 +14,4 @@ event-notifier
 *.swp
 
 .DS_Store
+vendor/

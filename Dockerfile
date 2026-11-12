@@ -2,14 +2,15 @@
 FROM golang:alpine AS builder
 
 # Instalar git y dependencias necesarias para compilar si aplica
-RUN apk add --no-cache git
+#RUN apk add --no-cache git
 
 # Establecer el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
 # Copilar dependencias primero para aprovechar la caché de Docker
 COPY go.mod go.sum ./
-RUN go mod download
+#RUN go mod download
+COPY vendor ./vendor
 
 # Copiar el código fuente del proyecto
 COPY . .
@@ -22,12 +23,15 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/bin/worker ./cmd/
 FROM alpine:3.19
 
 # Instalar certificados CA por si se requieren llamadas TLS externas
-RUN apk add --no-cache wget ca-certificates tzdata
+#RUN apk add --no-cache wget ca-certificates tzdata
 
 WORKDIR /app
 
-# Copiar el binario compilado desde la etapa anterior
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/bin/worker /app/worker
+
+# Copiar el binario compilado desde la etapa anterior
+#COPY --from=builder /app/bin/worker /app/worker
 
 # Exponer el puerto de métricas Prometheus de la aplicación
 EXPOSE 2112

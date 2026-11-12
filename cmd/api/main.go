@@ -12,6 +12,7 @@ import (
 	httpadapter "event-notifier/internal/adapters/http"
 
 	"event-notifier/internal/adapters/cache"
+	_ "event-notifier/internal/adapters/http/docs"
 	"event-notifier/internal/middleware"
 
 	httpSwagger "github.com/swaggo/http-swagger"
