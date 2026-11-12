@@ -13,8 +13,20 @@ import (
 
 	"event-notifier/internal/adapters/cache"
 	"event-notifier/internal/middleware"
+
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
+// @title           Event Notifier API
+// @version         1.0
+// @description     Microservicio en Go para el despacho resiliente de notificaciones con RabbitMQ, Redis y Circuit Breaker.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name    Soporte Backend
+// @contact.email   soporte@empresa.com
+
+// @host            localhost:8080
+// @BasePath        /
 func main() {
 	log.Println("==========================================================")
 	log.Println("   Event Notifier - API REST con Health & Readiness       ")
@@ -95,6 +107,8 @@ func main() {
 		})
 	})
 
+	// 4. Endpoint de Swagger UI
+	mux.HandleFunc("/swagger/", httpSwagger.WrapHandler)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

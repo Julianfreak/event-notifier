@@ -37,6 +37,12 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 
 ---
 
+## 📚 Documentación de API (OpenAPI / Swagger)
+
+El microservicio expone una interfaz interactiva de documentación basada en especificaciones **OpenAPI 2.0 (Swagger)**:
+- **Generación Automática:** Sincronizada mediante anotaciones en los adaptadores HTTP utilizando `swaggo/swag`.
+- **Swagger UI Integrada:** Interfaz gráfica accesible en el endpoint `/swagger/index.html` para consultar y probar el contrato de la API en tiempo real.
+
 ## 📊 Stack de Observabilidad y Monitoreo
 
 El proyecto cuenta con un ecosistema completo de observabilidad contenerizado y automatizado bajo los principios de aplicaciones nativas de la nube (12-Factor App):

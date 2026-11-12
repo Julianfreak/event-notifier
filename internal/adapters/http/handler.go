@@ -25,6 +25,17 @@ type NotificationRequest struct {
 	IdempotencyKey string                   `json:"idempotency_key"`
 }
 
+// HandleSendNotification godoc
+// @Summary      Enviar una notificación con resiliencia
+// @Description  Recibe una solicitud de notificación, valida su esquema y la encola para su procesamiento asíncrono con idempotencia.
+// @Tags         notifications
+// @Accept       json
+// @Produce      json
+// @Param        notification  body      domain.Notificacion  true  "Datos de la notificación"
+// @Success      202           {object}  map[string]string    "Notificación aceptada para procesamiento"
+// @Failure      400           {object}  map[string]string    "Solicitud inválida o malformada"
+// @Failure      500           {object}  map[string]string    "Error interno al publicar en el broker"
+// @Router       /notifications [post]
 func (h *NotificationHandler) HandleSendNotification(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)

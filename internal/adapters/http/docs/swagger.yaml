@@ -1,0 +1,84 @@
+definitions:
+  domain.CanalNotificacion:
+    enum:
+    - EMAIL
+    - SMS
+    - PUSH
+    type: string
+    x-enum-varnames:
+    - CanalEmail
+    - CanalSMS
+    - CanalPush
+  domain.EstadoNotificacion:
+    enum:
+    - PENDIENTE
+    - ENVIADO
+    - FALLIDO
+    type: string
+    x-enum-varnames:
+    - EstadoPendiente
+    - EstadoEnviado
+    - EstadoFallido
+  domain.Notificacion:
+    properties:
+      canal:
+        $ref: '#/definitions/domain.CanalNotificacion'
+      created_at:
+        type: string
+      destinatario:
+        type: string
+      estado:
+        $ref: '#/definitions/domain.EstadoNotificacion'
+      id:
+        type: string
+      idempotency_key:
+        description: Clave única para evitar duplicados
+        type: string
+      intentos:
+        type: integer
+      mensaje:
+        type: string
+      updated_at:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /notifications:
+    post:
+      consumes:
+      - application/json
+      description: Recibe una solicitud de notificación, valida su esquema y la encola
+        para su procesamiento asíncrono con idempotencia.
+      parameters:
+      - description: Datos de la notificación
+        in: body
+        name: notification
+        required: true
+        schema:
+          $ref: '#/definitions/domain.Notificacion'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Notificación aceptada para procesamiento
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Solicitud inválida o malformada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Error interno al publicar en el broker
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Enviar una notificación con resiliencia
+      tags:
+      - notifications
+swagger: "2.0"
