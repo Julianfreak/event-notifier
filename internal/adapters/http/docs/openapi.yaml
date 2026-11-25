@@ -1,0 +1,220 @@
+openapi: 3.0.3
+info:
+  title: Event Notifier API
+  version: 1.0.0
+  description: API para encolar notificaciones y consultar la salud del servicio.
+servers:
+  - url: /
+    description: Servidor actual
+tags:
+  - name: notifications
+    description: Envío asíncrono de notificaciones
+  - name: health
+    description: Estado y disponibilidad del servicio
+paths:
+  /api/v1/notifications:
+    post:
+      tags:
+        - notifications
+      summary: Enviar una notificación
+      description: Encola una notificación para su procesamiento asíncrono. Si no se proporciona `idempotency_key`, se genera una automáticamente.
+      operationId: sendNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRequest'
+            example:
+              destinatario: user@example.com
+              canal: EMAIL
+              mensaje: Tu notificación está lista.
+              idempotency_key: client-request-123
+      responses:
+        '202':
+          description: Notificación aceptada y encolada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationAccepted'
+        '400':
+          description: JSON inválido o faltan campos obligatorios.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Los campos 'destinatario', 'canal' y 'mensaje' son obligatorios
+        '500':
+          description: No se pudo publicar la notificación en el broker.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Error al encolar la notificación
+  /healthz:
+    get:
+      tags:
+        - health
+      summary: Comprobar liveness
+      description: Confirma que el proceso HTTP está activo. No comprueba las dependencias externas.
+      operationId: getLiveness
+      responses:
+        '200':
+          description: El proceso está activo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Liveness'
+  /readyz:
+    get:
+      tags:
+        - health
+      summary: Comprobar readiness
+      description: Comprueba la conectividad de la API con RabbitMQ y Redis.
+      operationId: getReadiness
+      responses:
+        '200':
+          description: La API y sus dependencias están listas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+        '503':
+          description: RabbitMQ o Redis no está disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessFailure'
+components:
+  schemas:
+    NotificationRequest:
+      type: object
+      required:
+        - destinatario
+        - canal
+        - mensaje
+      properties:
+        destinatario:
+          type: string
+          description: Destinatario de la notificación.
+          example: user@example.com
+        canal:
+          type: string
+          description: Canal de entrega soportado.
+          enum:
+            - EMAIL
+            - SMS
+            - PUSH
+        mensaje:
+          type: string
+          description: Contenido de la notificación.
+          example: Tu notificación está lista.
+        idempotency_key:
+          type: string
+          description: Clave opcional para evitar solicitudes duplicadas.
+          example: client-request-123
+    NotificationAccepted:
+      type: object
+      required:
+        - status
+        - message
+        - data
+      properties:
+        status:
+          type: string
+          enum:
+            - success
+        message:
+          type: string
+          example: Notificación encolada correctamente para procesamiento asíncrono
+        data:
+          $ref: '#/components/schemas/Notification'
+    Notification:
+      type: object
+      required:
+        - id
+        - idempotency_key
+        - canal
+        - destinatario
+        - mensaje
+        - estado
+        - intentos
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          description: Identificador generado para la notificación.
+        idempotency_key:
+          type: string
+          description: Clave de idempotencia recibida o generada por la API.
+        canal:
+          type: string
+          enum:
+            - EMAIL
+            - SMS
+            - PUSH
+        destinatario:
+          type: string
+        mensaje:
+          type: string
+        estado:
+          type: string
+          enum:
+            - PENDIENTE
+            - ENVIADO
+            - FALLIDO
+        intentos:
+          type: integer
+          example: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Liveness:
+      type: object
+      required:
+        - status
+        - service
+      properties:
+        status:
+          type: string
+          enum:
+            - alive
+        service:
+          type: string
+          example: event-notifier-api
+    Readiness:
+      type: object
+      required:
+        - status
+        - rabbitmq
+        - redis
+      properties:
+        status:
+          type: string
+          enum:
+            - ready
+        rabbitmq:
+          type: string
+          enum:
+            - connected
+        redis:
+          type: string
+          enum:
+            - connected
+    ReadinessFailure:
+      type: object
+      required:
+        - status
+        - error
+      properties:
+        status:
+          type: string
+          enum:
+            - not ready
+        error:
+          type: string
+          description: Motivo por el que una dependencia no está disponible.

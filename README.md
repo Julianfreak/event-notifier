@@ -37,11 +37,13 @@ El proyecto separa la lógica central del negocio de los mecanismos de transport
 
 ---
 
-## 📚 Documentación de API (OpenAPI / Swagger)
+## 📚 Documentación de API (OpenAPI 3.0)
 
-El microservicio expone una interfaz interactiva de documentación basada en especificaciones **OpenAPI 2.0 (Swagger)**:
-- **Generación Automática:** Sincronizada mediante anotaciones en los adaptadores HTTP utilizando `swaggo/swag`.
-- **Swagger UI Integrada:** Interfaz gráfica accesible en el endpoint `/swagger/index.html` para consultar y probar el contrato de la API en tiempo real.
+El contrato de la API está definido en OpenAPI 3.0 en [`internal/adapters/http/docs/openapi.yaml`](internal/adapters/http/docs/openapi.yaml) y se incluye en el binario de la API.
+
+- **Especificación:** `http://localhost:8081/openapi.yaml`
+- **Swagger UI:** `http://localhost:8081/swagger/index.html`, configurada para cargar la especificación OpenAPI 3.0.
+- **Operaciones:** `POST /api/v1/notifications`, `GET /healthz` y `GET /readyz`.
 
 ## 📊 Stack de Observabilidad y Monitoreo
 
@@ -145,11 +147,16 @@ curl -i http://localhost:8081/healthz
 # Probar Readiness
 curl -i http://localhost:8081/readyz
 
-# Probar trazabilidad distribuida con Request IDs y Correlation IDs
-curl -i -X POST http://localhost:8081/api/v1/notifications
-
-cuyo body puede estar estructurado de la siguiente forma: 
-"{"id": "test-123", "canal": "email", "destinatario": "user@test.com", "mensaje": "Prueba de trazabilidad"}"
+# Enviar una notificación (la idempotency_key es opcional)
+curl -i -X POST http://localhost:8081/api/v1/notifications \
+  -H 'Content-Type: application/json' \
+  -H 'X-Request-ID: test-request-123' \
+  -d '{
+    "destinatario": "user@test.com",
+    "canal": "EMAIL",
+    "mensaje": "Prueba de notificación",
+    "idempotency_key": "test-idempotency-123"
+  }'
 ```
 
 ## 📈 Pruebas de Carga y Estrés (k6)

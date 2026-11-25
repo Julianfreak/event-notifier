@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log"
@@ -12,22 +13,12 @@ import (
 	httpadapter "event-notifier/internal/adapters/http"
 
 	"event-notifier/internal/adapters/cache"
-	_ "event-notifier/internal/adapters/http/docs"
+	"event-notifier/internal/adapters/http/docs"
 	"event-notifier/internal/middleware"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
-// @title           Event Notifier API
-// @version         1.0
-// @description     Microservicio en Go para el despacho resiliente de notificaciones con RabbitMQ, Redis y Circuit Breaker.
-// @termsOfService  http://swagger.io/terms/
-
-// @contact.name    Soporte Backend
-// @contact.email   soporte@empresa.com
-
-// @host            localhost:8080
-// @BasePath        /
 func main() {
 	log.Println("==========================================================")
 	log.Println("   Event Notifier - API REST con Health & Readiness       ")
@@ -108,8 +99,11 @@ func main() {
 		})
 	})
 
-	// 4. Endpoint de Swagger UI
-	mux.HandleFunc("/swagger/", httpSwagger.WrapHandler)
+	mux.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+		http.ServeContent(w, r, "openapi.yaml", time.Time{}, bytes.NewReader(docs.OpenAPISpec))
+	})
+	mux.Handle("/swagger/", httpSwagger.Handler(httpSwagger.URL("/openapi.yaml")))
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
